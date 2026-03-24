@@ -1,131 +1,95 @@
 "use client";
-import { BUSINESS_DATA as D } from "../data/business";
+import { TECHS } from "../data/techs";
+import Link from "next/link";
+
+const TRADE_CONFIG = {
+  electrical: { emoji: "⚡", text: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
+  hvac: { emoji: "❄️", text: "text-teal-400", bg: "bg-teal-500/10", border: "border-teal-500/30" },
+  solar: { emoji: "☀️", text: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+  plumbing: { emoji: "🔧", text: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30" },
+};
 
 const fmt = (n: number) => `$${n.toLocaleString()}`;
+const fmtK = (n: number) => `$${Math.round(n / 1000)}K`;
 
-function TechCard({ tech }: { tech: (typeof D.technicians)[0] }) {
-  const pct = Math.round((tech.revenueMTD / tech.target) * 100);
+function TechRow({ tech }: { tech: (typeof TECHS)[0] }) {
+  const pct = Math.round((tech.revenueMTD / tech.revenueTarget) * 100);
   const status = pct >= 90 ? "green" : pct >= 60 ? "amber" : "red";
-  const totalJobs = tech.commissionEligible + tech.commissionBlocked;
+  const cfg = TRADE_CONFIG[tech.trade];
+  const trend = tech.revenueMTD >= tech.lastMonthRevenue;
+  const commissionEarned = Math.round(tech.revenueMTD * 0.015) + tech.sellingCommission;
 
   return (
-    <div className={`card ${status === "red" ? "card-red" : status === "amber" ? "card-amber" : ""} mb-3`}>
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <div className="font-bold text-white text-base">{tech.name}</div>
-          <div className="text-xs text-gray-500">{tech.role}</div>
-        </div>
-        <div className="text-right">
-          <div
-            className={`text-2xl font-black ${
-              status === "green"
-                ? "text-green-400"
-                : status === "amber"
-                ? "text-yellow-400"
-                : "text-red-400"
-            }`}
-          >
-            {pct}%
+    <Link href={`/tech/${tech.slug}`} className="block">
+      <div className={`bg-gray-900 border rounded-xl p-3 mb-2 hover:border-gray-600 transition-all active:scale-99 ${status === "red" ? "border-red-900/60" : status === "amber" ? "border-yellow-900/60" : "border-gray-800"}`}>
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div className={`w-10 h-10 rounded-full ${cfg.bg} border ${cfg.border} flex items-center justify-center text-xs font-bold ${cfg.text} flex-shrink-0`}>
+            {tech.avatar}
           </div>
-          <div className="text-xs text-gray-500">of target</div>
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold text-sm">{tech.name}</span>
+              {tech.flag && <span className="text-xs">{tech.flag.split(" ")[0]}</span>}
+            </div>
+            <div className={`text-xs ${cfg.text}`}>{cfg.emoji} {tech.role}</div>
+            <div className="mt-1.5 bg-gray-800 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full ${status === "green" ? "bg-green-500" : status === "amber" ? "bg-yellow-500" : "bg-red-500"}`}
+                style={{ width: `${Math.min(pct, 100)}%` }}
+              />
+            </div>
+          </div>
+          {/* Stats */}
+          <div className="text-right flex-shrink-0 ml-2">
+            <div className={`font-black text-lg ${status === "green" ? "text-green-400" : status === "amber" ? "text-yellow-400" : "text-red-400"}`}>
+              {pct}%
+            </div>
+            <div className="text-gray-400 text-xs">{fmtK(tech.revenueMTD)}</div>
+            <div className={`text-xs mt-0.5 ${trend ? "text-green-400" : "text-red-400"}`}>
+              {trend ? "↑" : "↓"}
+            </div>
+          </div>
+        </div>
+        {/* Commission row */}
+        <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-800">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-green-400">✓ {tech.eligibleJobs} eligible</span>
+            {tech.blockedJobs > 0 && <span className="text-red-400">✗ {tech.blockedJobs} blocked</span>}
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-500">commission:</span>
+            <span className="text-green-300 font-semibold">{fmt(commissionEarned)}</span>
+            <span className="text-blue-400">→</span>
+          </div>
         </div>
       </div>
-
-      <div className="flex justify-between text-sm mb-2">
-        <div>
-          <span className="text-white font-bold">{fmt(tech.revenueMTD)}</span>
-          <span className="text-gray-500 text-xs ml-1">/ {fmt(tech.target)}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span
-            className={`text-sm ${
-              tech.trend === "up" ? "text-green-400" : "text-red-400"
-            }`}
-          >
-            {tech.trend === "up" ? "↑" : "↓"}
-          </span>
-          <span className="text-xs text-gray-500">vs last month</span>
-        </div>
-      </div>
-
-      <div className="progress-bar mb-3">
-        <div
-          className={`progress-fill ${
-            status === "green"
-              ? "bg-green-500"
-              : status === "amber"
-              ? "bg-yellow-500"
-              : "bg-red-500"
-          }`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
-
-      {/* Commission status */}
-      <div className="flex items-center justify-between text-xs mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-green-400 font-semibold">
-            ✓ {tech.commissionEligible} eligible
-          </span>
-          {tech.commissionBlocked > 0 && (
-            <span className="text-red-400 font-semibold">
-              ✗ {tech.commissionBlocked} blocked
-            </span>
-          )}
-        </div>
-        <span className="text-gray-600">{totalJobs} jobs</span>
-      </div>
-
-      {tech.commissionBlocked > 0 && (
-        <div className="progress-bar mb-2" style={{ height: 6 }}>
-          <div
-            className="h-full rounded-l bg-green-500"
-            style={{
-              width: `${(tech.commissionEligible / totalJobs) * 100}%`,
-              display: "inline-block",
-            }}
-          />
-        </div>
-      )}
-
-      {tech.flag && (
-        <div className="mt-2 bg-gray-900 rounded-lg px-3 py-2 text-xs text-yellow-300 font-semibold border border-yellow-900">
-          {tech.flag}
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
 
 export default function Technicians() {
-  const totalRevenue = D.technicians.reduce((s, t) => s + t.revenueMTD, 0);
-  const totalTarget = D.technicians.reduce((s, t) => s + t.target, 0);
+  const totalRevenue = TECHS.reduce((s, t) => s + t.revenueMTD, 0);
+  const totalTarget = TECHS.reduce((s, t) => s + t.revenueTarget, 0);
   const teamPct = Math.round((totalRevenue / totalTarget) * 100);
 
-  const dragging = D.technicians.filter((t) => {
-    const pct = (t.revenueMTD / t.target) * 100;
-    return pct < 50;
-  });
-
-  const performing = D.technicians.filter((t) => {
-    const pct = (t.revenueMTD / t.target) * 100;
-    return pct >= 50;
-  });
+  const sorted = [...TECHS].sort((a, b) => b.revenueMTD - a.revenueMTD);
 
   return (
     <div className="max-w-lg mx-auto px-3 py-4">
       <div className="mb-4">
         <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">TECHNICIANS</div>
-        <div className="text-sm text-gray-400">March Performance — Radical Transparency</div>
+        <div className="text-sm text-gray-400">March 2026 · Tap a tech to see their own dashboard</div>
       </div>
 
       {/* Team Total */}
-      <div className={`card mb-4 ${teamPct < 70 ? "card-red" : teamPct < 85 ? "card-amber" : "card-green"}`}>
+      <div className={`bg-gray-900 rounded-xl border p-4 mb-4 ${teamPct < 70 ? "border-red-900/60" : teamPct < 85 ? "border-yellow-900/60" : "border-green-900/60"}`}>
         <div className="flex justify-between items-center mb-2">
           <div>
-            <div className="metric-label">TEAM TOTAL</div>
-            <div className="text-3xl font-black text-white">{`$${Math.round(totalRevenue / 1000)}K`}</div>
-            <div className="text-gray-500 text-sm">/ ${Math.round(totalTarget / 1000)}K target</div>
+            <div className="text-gray-500 text-xs uppercase tracking-wide">TEAM TOTAL</div>
+            <div className="text-3xl font-black text-white">{fmtK(totalRevenue)}</div>
+            <div className="text-gray-500 text-sm">/ {fmtK(totalTarget)} target</div>
           </div>
           <div className="text-right">
             <div className={`text-4xl font-black ${teamPct < 70 ? "text-red-400" : teamPct < 85 ? "text-yellow-400" : "text-green-400"}`}>
@@ -133,34 +97,27 @@ export default function Technicians() {
             </div>
           </div>
         </div>
-        <div className="progress-bar">
+        <div className="bg-gray-800 rounded-full h-2.5">
           <div
-            className={`progress-fill ${teamPct < 70 ? "bg-red-500" : teamPct < 85 ? "bg-yellow-500" : "bg-green-500"}`}
+            className={`h-2.5 rounded-full ${teamPct < 70 ? "bg-red-500" : teamPct < 85 ? "bg-yellow-500" : "bg-green-500"}`}
             style={{ width: `${Math.min(teamPct, 100)}%` }}
           />
         </div>
+        <div className="text-gray-600 text-xs mt-2">
+          {TECHS.filter(t => t.revenueMTD >= t.commissionThreshold).length} of {TECHS.length} techs are commission-eligible this month
+        </div>
       </div>
 
-      {/* Performing Techs */}
-      <div className="section-header">PERFORMERS</div>
-      {performing.map((tech, i) => (
-        <TechCard key={i} tech={tech} />
+      {/* All techs */}
+      <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">ALL TECHNICIANS (tap to view personal dashboard)</div>
+      {sorted.map((tech) => (
+        <TechRow key={tech.slug} tech={tech} />
       ))}
 
-      {/* Dragging */}
-      {dragging.length > 0 && (
-        <>
-          <div className="section-header mt-4">🔴 DRAGGING THE TEAM</div>
-          <div className="card card-red mb-3 p-3">
-            <div className="text-red-400 text-xs font-bold mb-1">
-              These techs are significantly below target — visible to all
-            </div>
-          </div>
-          {dragging.map((tech, i) => (
-            <TechCard key={i} tech={tech} />
-          ))}
-        </>
-      )}
+      <div className="text-center text-gray-700 text-xs mt-4 pb-6">
+        Each tech can view ONLY their own data via their personal link.<br/>
+        Commission: 1.5% of eligible revenue + selling bonus.
+      </div>
     </div>
   );
 }
