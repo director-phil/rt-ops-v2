@@ -11,6 +11,7 @@ const nav = [
   { href: "/finance", label: "Finance", icon: "💰" },
   { href: "/marketing", label: "Ads", icon: "📣" },
   { href: "/actions", label: "Actions", icon: "✅" },
+  { href: "/commissions", label: "Commissions", icon: "💵" },
 ];
 
 export default function BottomNav() {

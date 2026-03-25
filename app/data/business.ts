@@ -159,44 +159,50 @@ export const BUSINESS_DATA = {
   },
 
   finance: {
-    phantomAR: 233000,
-    invoiceBalances: 406000,
-    overdueTop10: [
-      { client: "Greenfield Commercial", amount: 48200, daysOverdue: 67 },
-      { client: "Sunrise Property Group", amount: 34700, daysOverdue: 45 },
-      { client: "Metro Constructions", amount: 28900, daysOverdue: 38 },
-      { client: "Pacific Developments", amount: 22400, daysOverdue: 31 },
-      { client: "Harbour Building Co", amount: 19800, daysOverdue: 29 },
-      { client: "Apex Real Estate", amount: 17200, daysOverdue: 24 },
-      { client: "Central Builders", amount: 14600, daysOverdue: 21 },
-      { client: "Northern Constructions", amount: 11900, daysOverdue: 18 },
-      { client: "Coastal Projects", amount: 9400, daysOverdue: 15 },
-      { client: "Eastern Developments", amount: 8100, daysOverdue: 12 },
-    ],
+    // Source: Xero API — March 2026 verified figures (as at 24 Mar 2026)
+    phantomAR: 233000,       // ST-Xero sync broken — invoices show unpaid in Xero but collected in ST
+    invoiceBalances: 406000, // ST outstanding invoices — real invoice list being pulled via BookkeeperBot
+    // AR detail: invoice list loading via BookkeeperBot — DO NOT show fake company names
+    arNote: "Invoice breakdown loading via BookkeeperBot. Total outstanding: $406K.",
     cashFlow13Week: [
-      { week: "W1", net: 131654 },
-      { week: "W2", net: 42000 },
-      { week: "W3", net: 24000 },
-      { week: "W4", net: 8000 },
-      { week: "W5", net: 55000 },
-      { week: "W6", net: 38000 },
-      { week: "W7", net: 29000 },
-      { week: "W8", net: 44000 },
-      { week: "W9", net: 18000 },
-      { week: "W10", net: 31000 },
-      { week: "W11", net: 22000 },
-      { week: "W12", net: 41000 },
-      { week: "W13", net: 35000 },
+      // W1 = estimated from net profit + cash position; remainder are placeholders pending live bank feed
+      { week: "W1", net: 51636 },
+      { week: "W2", net: null },
+      { week: "W3", net: null },
+      { week: "W4", net: null },
+      { week: "W5", net: null },
+      { week: "W6", net: null },
+      { week: "W7", net: null },
+      { week: "W8", net: null },
+      { week: "W9", net: null },
+      { week: "W10", net: null },
+      { week: "W11", net: null },
+      { week: "W12", net: null },
+      { week: "W13", net: null },
     ],
     pnl: {
-      revenue: 443654,
-      cogs: 245000,
-      grossProfit: 198654,
-      grossMargin: 44.8,
-      operatingExpenses: 123000,
-      ebitda: 75654,
-      ebitdaMargin: 17.1,
+      // Xero API — March 2026 P&L
+      revenue: 479320,
+      cogs: 148439,          // Materials only (31%)
+      grossProfit: 330881,   // 69% gross margin
+      grossMargin: 69.0,
+      solarRebate: 4469,
+      googleAds: 40022,
+      businessSoftware: 11137,
+      wagesAndOverhead: 213813, // ~45% of revenue — wages not fully broken out yet
+      operatingExpenses: 279245, // google ads + software + wages/overhead (excl. solar rebate credit)
+      ebitda: 51636,
+      ebitdaMargin: 10.8,
+      ebitdaFloor: 15,       // minimum acceptable
+      ebitdaTarget: 30,      // stretch target
     },
+    costBreakdown: [
+      { label: "Materials (COGS)", pct: 31.0, amount: 148439, color: "#ef4444" },
+      { label: "Wages & Overhead", pct: 44.6, amount: 213813, color: "#f97316" },
+      { label: "Google Ads",       pct: 8.4,  amount: 40022,  color: "#eab308" },
+      { label: "Business Software",pct: 2.3,  amount: 11137,  color: "#8b5cf6" },
+      { label: "Net Profit",       pct: 10.8, amount: 51636,  color: "#22c55e" },
+    ],
   },
 
   marketing: {
