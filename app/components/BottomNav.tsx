@@ -26,11 +26,17 @@ export default function BottomNav() {
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center justify-center flex-1 min-w-[50px] py-2 px-1 text-center transition-colors ${
-                active ? "text-white bg-gray-800" : "text-gray-500"
+                active ? "text-white bg-gray-800 border-t-2" : "text-gray-500 hover:text-gray-300"
               }`}
+              style={active ? { borderTopColor: "#FF4500" } : {}}
             >
               <span className="text-lg leading-tight">{item.icon}</span>
-              <span className="text-[10px] font-semibold mt-0.5 leading-tight">{item.label}</span>
+              <span
+                className="text-[10px] font-semibold mt-0.5 leading-tight"
+                style={active ? { color: "#FF4500" } : {}}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}
