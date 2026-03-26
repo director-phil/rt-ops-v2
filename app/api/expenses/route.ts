@@ -8,136 +8,118 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   const mcpUrl = process.env.ZAPIER_MCP_URL;
   if (!mcpUrl) throw new Error("ZAPIER_MCP_URL not configured");
 
-  // Zapier streamable HTTP MCP: requires jsonrpc 2.0, headers as string, instructions required
   const args = { ...toolArgs };
   if (!args.instructions) args.instructions = `Call ${toolName}`;
-  // Convert headers object → newline-delimited string if needed
   if (args.headers && typeof args.headers === "object") {
     args.headers = Object.entries(args.headers as Record<string, string>)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("\n");
+      .map(([k, v]) => `${k}: ${v}`).join("\n");
   }
-
-  const body = {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: toolName, arguments: args },
-  };
 
   const res = await fetch(mcpUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-    },
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: toolName, arguments: args } }),
     cache: "no-store",
   });
 
   const rawText = await res.text();
-  if (!res.ok) {
-    throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
-  }
+  if (!res.ok) throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
 
-  // Zapier returns SSE (event: message / data: {...}) — extract last data line
   let jsonStr = rawText;
-  if (rawText.includes("\ndata:") || rawText.startsWith("event:") || rawText.startsWith("data:")) {
+  if (rawText.startsWith("event:") || rawText.startsWith("data:") || rawText.includes("\ndata:")) {
     const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
     jsonStr = lines[lines.length - 1]?.replace(/^data:\s*/, "") || "{}";
   }
   return JSON.parse(jsonStr);
 }
 
+function parseZapierBody(result: Record<string, unknown>): Record<string, unknown> {
+  const content = (result?.result as Record<string, unknown>)?.content || result?.content || [];
+  const textBlock = (content as Record<string, unknown>[]).find(c => c.type === "text");
+  if (!textBlock?.text) return {};
+  const outer = JSON.parse(textBlock.text as string) as Record<string, unknown>;
+  const results = (outer?.results as Record<string, unknown>[]) || [];
+  const body = (results[0]?.response as Record<string, unknown>)?.body;
+  if (!body) return {};
+  return typeof body === "string" ? JSON.parse(body) : body as Record<string, unknown>;
+}
+
+const parseNum = (v: unknown): number => {
+  const n = typeof v === "string" ? parseFloat(v) : Number(v);
+  return isNaN(n) ? 0 : n;
+};
+
 export async function GET(_req: NextRequest) {
   try {
+    const now = new Date();
+    const fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const toDate = now.toISOString().split("T")[0];
+
+    // Use P&L report — fast single call, structured data
     const result = await callZapierMCP("xero_api_request_beta", {
-      url: "https://api.xero.com/api.xro/2.0/Invoices?Type=ACCPAY&Status=AUTHORISED",
+      instructions: `Get profit and loss report for ${fromDate} to ${toDate}`,
+      url: `https://api.xero.com/api.xro/2.0/Reports/ProfitAndLoss?fromDate=${fromDate}&toDate=${toDate}`,
       method: "GET",
-      headers: {
-        "Xero-tenant-id": XERO_TENANT_ID,
-        Accept: "application/json, text/event-stream",
-      },
+      headers: { "Xero-tenant-id": XERO_TENANT_ID, Accept: "application/json" },
     });
 
-    let invoices: Record<string, unknown>[] = [];
-    const content = result?.result?.content || result?.content || [];
-    const textBlock = content.find((c: Record<string, unknown>) => c.type === "text");
-    if (textBlock?.text) {
-      try {
-        const parsed = JSON.parse(textBlock.text as string);
-        invoices = parsed.Invoices || parsed.invoices || [];
-      } catch {
-        const match = (textBlock.text as string).match(/\{[\s\S]*\}/);
-        if (match) {
-          const parsed = JSON.parse(match[0]);
-          invoices = parsed.Invoices || parsed.invoices || [];
+    const xeroData = parseZapierBody(result);
+    const reports = (xeroData.Reports || []) as Record<string, unknown>[];
+    const report = reports[0] || {};
+    const rows = (report.Rows || []) as Record<string, unknown>[];
+
+    // Parse P&L rows into structured sections
+    const sections: Record<string, { total: number; items: { name: string; amount: number }[] }> = {};
+    let currentSection = "";
+
+    for (const row of rows) {
+      const rowType = String(row.RowType || "");
+      const title = String(row.Title || "");
+
+      if (rowType === "Section" && title) {
+        currentSection = title;
+        sections[currentSection] = { total: 0, items: [] };
+      }
+
+      const subRows = (row.Rows || []) as Record<string, unknown>[];
+      for (const sub of subRows) {
+        const cells = (sub.Cells || []) as Record<string, unknown>[];
+        const name = String(cells[0]?.Value || "");
+        const amount = parseNum(cells[1]?.Value);
+        if (!name) continue;
+
+        if (name.startsWith("Total ")) {
+          if (sections[currentSection]) sections[currentSection].total = amount;
+        } else if (sections[currentSection]) {
+          sections[currentSection].items.push({ name, amount });
         }
       }
     }
 
-    const now = new Date();
-
-    const expenses = invoices.map((inv: Record<string, unknown>) => {
-      const contact = (inv.Contact as Record<string, unknown>) || {};
-      const supplier = (contact.Name as string) || (contact.name as string) || "Unknown Supplier";
-      const amountDue = (inv.AmountDue as number) || (inv.amountDue as number) || 0;
-      const dueDateStr = (inv.DueDate as string) || (inv.dueDate as string) || "";
-      
-      let daysUntilDue: number | null = null;
-      let dueDate: string | null = null;
-      
-      if (dueDateStr) {
-        // Xero dates come as /Date(timestamp)/
-        const tsMatch = dueDateStr.match(/\/Date\((\d+)\)\//);
-        let due: Date;
-        if (tsMatch) {
-          due = new Date(parseInt(tsMatch[1]));
-        } else {
-          due = new Date(dueDateStr);
-        }
-        dueDate = due.toISOString().split("T")[0];
-        daysUntilDue = Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      }
-
-      return {
-        invoiceId: inv.InvoiceID || inv.invoiceId,
-        invoiceNumber: inv.InvoiceNumber || inv.invoiceNumber || "",
-        supplier,
-        amountDue: typeof amountDue === "number" ? amountDue : parseFloat(String(amountDue)) || 0,
-        dueDate,
-        daysUntilDue,
-        currency: (inv.CurrencyCode as string) || "AUD",
-        status: (inv.Status as string) || "AUTHORISED",
-      };
-    });
-
-    // Sort by due date (soonest first), nulls last
-    expenses.sort((a, b) => {
-      if (a.dueDate === null && b.dueDate === null) return 0;
-      if (a.dueDate === null) return 1;
-      if (b.dueDate === null) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-
-    const totalOwed = expenses.reduce((s, e) => s + e.amountDue, 0);
+    const income = sections["Income"]?.total || 0;
+    const cogs = sections["Less Cost of Sales"]?.total || 0;
+    const grossProfit = sections["Gross Profit"] ? (sections["Gross Profit"]?.items[0]?.amount || income - cogs) : income - cogs;
+    const opExpenses = sections["Less Operating Expenses"] || { total: 0, items: [] };
+    const netProfit = grossProfit - opExpenses.total;
 
     return NextResponse.json({
       ok: true,
-      expenses,
-      totalOwed: Math.round(totalOwed),
-      count: expenses.length,
+      period: `${fromDate} to ${toDate}`,
+      income: Math.round(income),
+      cogs: Math.round(cogs),
+      grossProfit: Math.round(grossProfit),
+      grossMarginPct: income > 0 ? Math.round((grossProfit / income) * 1000) / 10 : 0,
+      operatingExpenses: Math.round(opExpenses.total),
+      netProfit: Math.round(netProfit),
+      netMarginPct: income > 0 ? Math.round((netProfit / income) * 1000) / 10 : 0,
+      expenseBreakdown: opExpenses.items
+        .sort((a, b) => b.amount - a.amount)
+        .map(e => ({ name: e.name, amount: Math.round(e.amount) })),
       updatedAt: new Date().toISOString(),
-      source: "Xero via Zapier",
+      source: "Xero P&L via Zapier",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/expenses]", msg);
-    return NextResponse.json({
-      ok: false,
-      error: msg,
-      expenses: [],
-      updatedAt: new Date().toISOString(),
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg, updatedAt: new Date().toISOString() }, { status: 500 });
   }
 }
