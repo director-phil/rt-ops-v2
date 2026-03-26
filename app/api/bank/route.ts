@@ -10,19 +10,14 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
 
   const args = { ...toolArgs };
   if (!args.instructions) args.instructions = `Call ${toolName}`;
-  // Zapier needs headers as newline-delimited string
   if (args.headers && typeof args.headers === "object") {
     args.headers = Object.entries(args.headers as Record<string, string>)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("\n");
+      .map(([k, v]) => `${k}: ${v}`).join("\n");
   }
 
   const res = await fetch(mcpUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-    },
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: toolName, arguments: args } }),
     cache: "no-store",
   });
@@ -30,7 +25,6 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   const rawText = await res.text();
   if (!res.ok) throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
 
-  // Zapier returns SSE — extract last data line
   let jsonStr = rawText;
   if (rawText.startsWith("event:") || rawText.startsWith("data:") || rawText.includes("\ndata:")) {
     const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
@@ -39,52 +33,86 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   return JSON.parse(jsonStr);
 }
 
-function parseZapierResult(result: Record<string, unknown>): Record<string, unknown> {
-  // Zapier MCP response structure:
-  // result.result.content[0].text → JSON string → .results[0].response.body → Xero response
-  const content = (result?.result as Record<string, unknown>)?.content
-    || result?.content || [];
+function parseZapierBody(result: Record<string, unknown>): Record<string, unknown> {
+  const content = (result?.result as Record<string, unknown>)?.content || result?.content || [];
   const textBlock = (content as Record<string, unknown>[]).find(c => c.type === "text");
   if (!textBlock?.text) return {};
-
   const outer = JSON.parse(textBlock.text as string) as Record<string, unknown>;
   const results = (outer?.results as Record<string, unknown>[]) || [];
-  const body = results[0]?.response as Record<string, unknown>;
-  const rawBody = body?.body;
-  if (!rawBody) return {};
-  return typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody as Record<string, unknown>;
+  const body = (results[0]?.response as Record<string, unknown>)?.body;
+  if (!body) return {};
+  return typeof body === "string" ? JSON.parse(body) : body as Record<string, unknown>;
 }
+
+const parseNum = (v: unknown): number => {
+  const n = typeof v === "string" ? parseFloat(v) : Number(v);
+  return isNaN(n) ? 0 : n;
+};
 
 export async function GET(_req: NextRequest) {
   try {
+    // Use Balance Sheet to get real bank balances (Accounts endpoint doesn't include balance)
+    const today = new Date().toISOString().split("T")[0];
     const result = await callZapierMCP("xero_api_request_beta", {
-      instructions: "Get all bank accounts and their current balances from Xero",
-      url: "https://api.xero.com/api.xro/2.0/Accounts?where=Type%3D%3D%22BANK%22",
+      instructions: "Get balance sheet to find current bank account balances",
+      url: `https://api.xero.com/api.xro/2.0/Reports/BalanceSheet?date=${today}`,
       method: "GET",
-      headers: {
-        "Xero-tenant-id": XERO_TENANT_ID,
-        Accept: "application/json",
-      },
+      headers: { "Xero-tenant-id": XERO_TENANT_ID, Accept: "application/json" },
     });
 
-    const xeroData = parseZapierResult(result);
-    const rawAccounts = (xeroData.Accounts || xeroData.BankAccounts || []) as Record<string, unknown>[];
+    const xeroData = parseZapierBody(result);
+    const reports = (xeroData.Reports || []) as Record<string, unknown>[];
+    const report = reports[0] || {};
+    const rows = (report.Rows || []) as Record<string, unknown>[];
 
-    const bankAccounts = rawAccounts.map(acc => ({
-      id: acc.AccountID,
-      name: acc.Name,
-      code: acc.Code,
-      balance: typeof acc.Balance === "number" ? acc.Balance : parseFloat(String(acc.Balance || "0")),
-      currency: acc.CurrencyCode || "AUD",
-      type: acc.Type || "BANK",
-    }));
+    // Extract bank section
+    const bankAccounts: { name: string; balance: number }[] = [];
+    let inBankSection = false;
+    let totalBank = 0;
+
+    for (const section of rows) {
+      const title = String(section.Title || "");
+      if (title === "Bank") inBankSection = true;
+      else if (title && title !== "Bank" && inBankSection) inBankSection = false;
+
+      if (inBankSection) {
+        const subRows = (section.Rows || []) as Record<string, unknown>[];
+        for (const row of subRows) {
+          const cells = (row.Cells || []) as Record<string, unknown>[];
+          if (cells.length < 2) continue;
+          const name = String(cells[0]?.Value || "");
+          const balance = parseNum(cells[1]?.Value);
+          if (name && name !== "Total Bank" && !name.startsWith("Total")) {
+            bankAccounts.push({ name, balance });
+          }
+          if (name === "Total Bank") totalBank = balance;
+        }
+      }
+    }
+
+    // Also extract AR and key liabilities for context
+    let ar = 0;
+    let ap = 0;
+    for (const section of rows) {
+      const subRows = (section.Rows || []) as Record<string, unknown>[];
+      for (const row of subRows) {
+        const cells = (row.Cells || []) as Record<string, unknown>[];
+        const name = String(cells[0]?.Value || "");
+        const val = parseNum(cells[1]?.Value);
+        if (name === "Accounts Receivable") ar = val;
+        if (name === "Accounts Payable") ap = val;
+      }
+    }
 
     return NextResponse.json({
       ok: true,
       bankAccounts,
-      totalBalance: bankAccounts.reduce((s, a) => s + (a.balance || 0), 0),
+      totalBank: totalBank || bankAccounts.reduce((s, a) => s + a.balance, 0),
+      ar,
+      ap,
+      netCash: (totalBank || bankAccounts.reduce((s, a) => s + a.balance, 0)) - ap,
       updatedAt: new Date().toISOString(),
-      source: "Xero via Zapier",
+      source: "Xero Balance Sheet via Zapier",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
