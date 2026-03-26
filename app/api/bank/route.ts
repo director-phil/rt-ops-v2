@@ -28,7 +28,7 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json, text/event-stream",
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -49,7 +49,7 @@ export async function GET(_req: NextRequest) {
       method: "GET",
       headers: {
         "Xero-tenant-id": XERO_TENANT_ID,
-        Accept: "application/json",
+        Accept: "application/json, text/event-stream",
       },
     });
 

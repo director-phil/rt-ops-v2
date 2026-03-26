@@ -33,7 +33,7 @@ export async function GET(_req: NextRequest) {
       method: "GET",
       headers: {
         "Xero-tenant-id": XERO_TENANT_ID,
-        Accept: "application/json",
+        Accept: "application/json, text/event-stream",
       },
     });
 
