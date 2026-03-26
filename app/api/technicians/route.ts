@@ -10,121 +10,102 @@ const NET_SALE_FACTOR = 0.95;
 const COMMISSION_RATE = 0.015;
 
 // Whitelist of real field technicians — sourced from Phillip 2026-03-25
-const TECH_WHITELIST = [
-  "Mitch Powell",
-  "Romello Moore",
-  "Curtis Jeffrey",
-  "Kyle Rootes",
-  "Zachary Lingard",
-  "Dean Retra",
-  "Hayden Sibley",
-  "Scott Gullick",
-  "Lachlan Henzell",
-  "Rusty Daniells",
-  "Bradley Tinworth MT",
-  "Kristian Calcagno",
-  "Alex Naughton",
-  "David White",
-  "Bailey Somerville",
-  "Daniel Hayes",
-  "Alex Peisler",
-];
+const TECH_WHITELIST = new Set([
+  "mitch powell",
+  "romello moore",
+  "curtis jeffrey",
+  "kyle rootes",
+  "zachary lingard",
+  "zach lingard",
+  "dean retra",
+  "hayden sibley",
+  "scott gullick",
+  "lachlan henzell",
+  "rusty daniells",
+  "bradley tinworth mt",
+  "bradley tinworth",
+  "kristian calcagno",
+  "alex naughton",
+  "david white",
+  "bailey somerville",
+  "daniel hayes",
+  "alex peisler",
+]);
+
+function isTech(name: string): boolean {
+  if (!name || name.includes("@")) return false;
+  return TECH_WHITELIST.has(name.toLowerCase());
+}
 
 const parseNum = (v: unknown): number => {
   const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
   return isNaN(n) ? 0 : n;
 };
 
-function isTech(name: string): boolean {
-  // Never show email addresses or login accounts
-  if (!name || name.includes("@")) return false;
-  // Use whitelist match (case-insensitive)
-  for (const w of TECH_WHITELIST) {
-    if (w.toLowerCase() === name.toLowerCase()) return true;
-  }
-  return false;
-}
-
-async function fetchEmployeeTechIds(): Promise<Set<string>> {
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
-  const techIds = new Set<string>();
-
-  try {
-    const token = await getSTToken();
-    // Try HR API first for role-filtered employees
-    const url = `https://api.servicetitan.io/hr/v2/tenant/${tenantId}/employees?active=true&pageSize=200`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, "ST-App-Key": appKey },
-      cache: "no-store",
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const employees = data.data || [];
-      for (const emp of employees) {
-        const name = (emp.name as string) || "";
-        const roles = (emp.roles as string[]) || [];
-        const roleStr = roles.join(",").toLowerCase();
-        // Include if in whitelist OR has Technician role and not email
-        if (
-          isTech(name) ||
-          (roleStr.includes("technician") && !name.includes("@"))
-        ) {
-          techIds.add(String(emp.id));
-        }
-      }
-    }
-  } catch {
-    // Fall through — we'll rely on whitelist filtering of invoice data
-  }
-
-  return techIds;
-}
-
 async function fetchTechMetrics(from: string, to: string) {
   const tenantId = process.env.ST_TENANT_ID!;
+  const appKey = process.env.ST_APP_KEY!;
 
-  const invoices = await stFetchAll(`/accounting/v2/tenant/${tenantId}/invoices`, {
-    createdOnOrAfter: from,
-    createdBefore: to,
-    active: "True",
+  // Step 1: Fetch completed jobs in range
+  const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
+    completedOnOrAfter: from,
+    completedBefore: to,
+    jobStatus: "Completed",
     pageSize: "500",
   }) as Record<string, unknown>[];
 
+  if (jobs.length === 0) return [];
+
+  // Step 2: For each job, get tech assignment via dispatch API
+  // Batch by fetching dispatch assignments with jobIds
   const techMap: Record<string, {
-    id: number | string;
     name: string;
     revenue: number;
-    invoices: number;
-    recalls: number;
+    jobCount: number;
   }> = {};
 
-  for (const inv of invoices) {
-    const revenue = parseNum(inv.total);
+  // Process in batches of 50 to avoid rate limits
+  const BATCH = 50;
+  const token = await getSTToken();
+  const headers = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
 
-    const empInfo = inv.employeeInfo as Record<string, unknown> | null;
-    const assignedTo = inv.assignedTo as Record<string, unknown> | null;
-    const createdBy = inv.createdBy as Record<string, unknown> | null;
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    const batch = jobs.slice(i, i + BATCH);
+    
+    // Fetch dispatch assignments for these jobs in parallel
+    const assignments = await Promise.allSettled(
+      batch.map(async (job) => {
+        const jobId = job.id as number;
+        const total = parseNum(job.total);
+        
+        const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?jobId=${jobId}&pageSize=50`;
+        const res = await fetch(url, { headers, cache: "no-store" });
+        if (!res.ok) return { jobId, total, techName: null };
+        
+        const data = await res.json();
+        const assigns = (data.data || []) as Record<string, unknown>[];
+        // Get first active/done technician
+        const assign = assigns.find(a => a.status !== "Dismissed") || assigns[0];
+        const techName = assign ? (assign.technicianName as string) || null : null;
+        
+        return { jobId, total, techName };
+      })
+    );
 
-    const techInfo = empInfo || assignedTo || createdBy;
-    if (!techInfo?.id) continue;
-
-    const id = String(techInfo.id);
-    const name = (techInfo.name as string) || "Unknown";
-
-    // Filter: must be a real tech (not email/login account)
-    if (!isTech(name)) continue;
-
-    if (!techMap[id]) {
-      techMap[id] = { id, name, revenue: 0, invoices: 0, recalls: 0 };
+    for (const result of assignments) {
+      if (result.status !== "fulfilled") continue;
+      const { total, techName } = result.value;
+      if (!techName || !isTech(techName)) continue;
+      
+      const key = techName.toLowerCase();
+      if (!techMap[key]) {
+        techMap[key] = { name: techName, revenue: 0, jobCount: 0 };
+      }
+      techMap[key].revenue += total;
+      techMap[key].jobCount++;
     }
-    techMap[id].revenue += revenue;
-    techMap[id].invoices++;
   }
 
-  // Also try to get any whitelisted techs from jobs endpoint (they may not appear in invoices)
-  // but return what we have from invoices for now
   return Object.values(techMap);
 }
 
@@ -139,12 +120,14 @@ export async function GET(req: NextRequest) {
       fetchTechMetrics(range.prevFrom, range.prevTo),
     ]);
 
-    const prevMap = new Map(previous.map(t => [t.name, t]));
+    const prevMap = new Map(previous.map(t => [t.name.toLowerCase(), t]));
 
     const technicians = current.map(tech => {
-      const prev = prevMap.get(tech.name);
+      const prev = prevMap.get(tech.name.toLowerCase());
       const revChange = prev ? tech.revenue - prev.revenue : null;
-      const revChangePct = prev && prev.revenue > 0 ? ((tech.revenue - prev.revenue) / prev.revenue) * 100 : null;
+      const revChangePct = prev && prev.revenue > 0
+        ? ((tech.revenue - prev.revenue) / prev.revenue) * 100
+        : null;
 
       const netSale = tech.revenue * NET_SALE_FACTOR;
       const meetsThreshold = tech.revenue >= COMMISSION_THRESHOLD;
@@ -152,16 +135,12 @@ export async function GET(req: NextRequest) {
       const progressPct = Math.min(100, Math.round((tech.revenue / COMMISSION_THRESHOLD) * 100));
 
       return {
-        id: tech.id,
         name: tech.name,
         revenueMTD: Math.round(tech.revenue),
         prevRevenue: prev ? Math.round(prev.revenue) : null,
         revChange: revChange !== null ? Math.round(revChange) : null,
         revChangePct: revChangePct !== null ? Math.round(revChangePct * 10) / 10 : null,
-        jobCount: tech.invoices,
-        hoursWorked: 0,
-        revPerHr: null,
-        recalls: tech.recalls,
+        jobCount: tech.jobCount,
         commission: Math.round(commission * 100) / 100,
         meetsThreshold,
         progressPct,
