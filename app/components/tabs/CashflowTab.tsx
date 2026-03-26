@@ -2,122 +2,148 @@
 
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend, Cell
+  ResponsiveContainer, ReferenceLine, Cell
 } from "recharts";
-import { CASHFLOW_DATA, CASHFLOW_ANNOTATIONS, METRICS } from "@/app/data/staticData";
+import { useApi } from "@/app/lib/use-api";
 
-const TARGET_EBITDA_ABS = 600000 * 0.30; // $180,000
+const EBITDA_TARGET_PCT = 30;
+const REVENUE_TARGET = 600000;
+
+type ExpensesData = {
+  income: number;
+  cogs: number;
+  grossProfit: number;
+  grossMarginPct: number;
+  operatingExpenses: number;
+  netProfit: number;
+  netMarginPct: number;
+  expenseBreakdown: { name: string; amount: number }[];
+  updatedAt?: string;
+};
 
 export default function CashflowTab() {
-  const latest = CASHFLOW_DATA.find(d => d.month === "Feb 26")!;
-  const projected = CASHFLOW_DATA.filter(d => d.type === "projected");
+  const { data, loading, error } = useApi<ExpensesData>("/api/expenses", {});
+
+  const ebitdaActual = data?.netMarginPct ?? null;
+  const income = data?.income ?? null;
+  const netProfit = data?.netProfit ?? null;
+
+  const chartData = data
+    ? [{ month: "March 2026 (Live)", revenue: data.income, ebitda: data.netProfit }]
+    : [];
+
+  const ebitdaGap = ebitdaActual !== null ? (EBITDA_TARGET_PCT - ebitdaActual).toFixed(1) : null;
 
   return (
     <div className="p-4 lg:p-6 space-y-5">
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <CfKpi label="Current Month Revenue" value="$510,216" sub="Feb 2026 actual" color="orange" />
-        <CfKpi label="EBITDA Actual"          value={`${METRICS.ebitdaActualPct}%`} sub={`$${(510216 * 0.108 / 1000).toFixed(0)}k`} color="amber" />
-        <CfKpi label="EBITDA Target"          value={`${METRICS.ebitdaTargetPct}%`} sub="$180k/month at $600k rev" color="green" />
-        <CfKpi label="Mar 26 Projected"       value="$590k" sub="Revenue forecast" color="blue" />
+        <CfKpi
+          label="Current Month Revenue"
+          value={loading ? "…" : income !== null ? `$${Math.round(income / 1000)}k` : "—"}
+          sub="March 2026 (live)"
+          color="orange"
+        />
+        <CfKpi
+          label="EBITDA Actual"
+          value={loading ? "…" : ebitdaActual !== null ? `${ebitdaActual.toFixed(1)}%` : "—"}
+          sub={loading ? "" : netProfit !== null ? `$${Math.round(netProfit / 1000)}k net profit` : "—"}
+          color="amber"
+        />
+        <CfKpi
+          label="EBITDA Target"
+          value={`${EBITDA_TARGET_PCT}%`}
+          sub="$180k/month at $600k rev"
+          color="green"
+        />
+        <CfKpi
+          label="Gap to Target"
+          value={loading ? "…" : ebitdaGap !== null ? `${ebitdaGap}pp` : "—"}
+          sub="points below 30% target"
+          color="blue"
+        />
       </div>
 
       {/* Main chart */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-1">
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-zinc-500">18-Month Revenue + EBITDA Trend</div>
-            <div className="text-xs text-zinc-600 mt-0.5">Sep 2024 — May 2026 · Projected months shown with dashed border</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-zinc-500">March 2026 — Live Revenue &amp; Net Profit</div>
+            <div className="text-xs text-zinc-600 mt-0.5">
+              {data?.updatedAt
+                ? `Updated: ${new Date(data.updatedAt).toLocaleString()}`
+                : "Live data from Xero API"}
+            </div>
           </div>
           <div className="flex items-center gap-3 text-xs">
-            <LegendDot color="#FF4500" label="Revenue (actual)" />
-            <LegendDot color="#6366f1" label="Revenue (projected)" />
-            <LegendDot color="#22c55e" label="EBITDA $" />
+            <LegendDot color="#FF4500" label="Revenue (live)" />
+            <LegendDot color="#22c55e" label="Net Profit (live)" />
           </div>
         </div>
 
-        <ResponsiveContainer width="100%" height={340}>
-          <ComposedChart data={CASHFLOW_DATA} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-            <XAxis
-              dataKey="month"
-              tick={{ fill: "#6b7280", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              yAxisId="rev"
-              tick={{ fill: "#6b7280", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => `$${(v/1000).toFixed(0)}k`}
-              width={52}
-            />
-            <YAxis
-              yAxisId="ebitda"
-              orientation="right"
-              tick={{ fill: "#6b7280", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => `$${(v/1000).toFixed(0)}k`}
-              width={52}
-            />
-            <Tooltip
-              contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
-              formatter={(v: unknown, name: unknown) => [
-                `$${Number(v ?? 0).toLocaleString()}`,
-                String(name) === "revenue" ? "Revenue" : String(name) === "ebitda" ? "EBITDA" : String(name)
-              ] as [string, string]}
-            />
-            {/* Revenue bars */}
-            <Bar yAxisId="rev" dataKey="revenue" radius={[3, 3, 0, 0]} maxBarSize={28}>
-              {CASHFLOW_DATA.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={entry.type === "projected" ? "#6366f1" : "#FF4500"}
-                  opacity={entry.type === "projected" ? 0.7 : 0.9}
-                />
-              ))}
-            </Bar>
-            {/* EBITDA line */}
-            <Line
-              yAxisId="ebitda"
-              type="monotone"
-              dataKey="ebitda"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={{ fill: "#22c55e", r: 3 }}
-            />
-            {/* 30% EBITDA target reference */}
-            <ReferenceLine
-              yAxisId="ebitda"
-              y={TARGET_EBITDA_ABS}
-              stroke="#22c55e"
-              strokeDasharray="6 3"
-              strokeOpacity={0.5}
-              label={{ value: "30% EBITDA target", fill: "#22c55e", fontSize: 10, position: "right" }}
-            />
-            {/* Revenue $600k target */}
-            <ReferenceLine
-              yAxisId="rev"
-              y={600000}
-              stroke="#FF4500"
-              strokeDasharray="4 2"
-              strokeOpacity={0.4}
-              label={{ value: "$600k target", fill: "#FF4500", fontSize: 10, position: "insideTopLeft" }}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-
-        {/* Annotations */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {CASHFLOW_ANNOTATIONS.map(a => (
-            <div key={a.month} className="text-xs bg-zinc-800 rounded-full px-3 py-1 text-zinc-400">
-              <span className="text-zinc-600">{a.month}:</span> {a.label}
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="h-[340px] flex items-center justify-center text-zinc-500 text-sm">Loading live data…</div>
+        ) : error ? (
+          <div className="h-[340px] flex items-center justify-center text-red-400 text-sm">{error}</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={340}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+              <XAxis
+                dataKey="month"
+                tick={{ fill: "#6b7280", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="rev"
+                tick={{ fill: "#6b7280", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+                width={52}
+              />
+              <YAxis
+                yAxisId="profit"
+                orientation="right"
+                tick={{ fill: "#6b7280", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+                width={52}
+              />
+              <Tooltip
+                contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                formatter={(v: unknown, name: unknown) => [
+                  `$${Number(v ?? 0).toLocaleString()}`,
+                  String(name) === "revenue" ? "Revenue" : "Net Profit"
+                ] as [string, string]}
+              />
+              <Bar yAxisId="rev" dataKey="revenue" radius={[3, 3, 0, 0]} maxBarSize={80}>
+                {chartData.map((_, i) => (
+                  <Cell key={i} fill="#FF4500" opacity={0.9} />
+                ))}
+              </Bar>
+              <Line
+                yAxisId="profit"
+                type="monotone"
+                dataKey="ebitda"
+                stroke="#22c55e"
+                strokeWidth={2}
+                dot={{ fill: "#22c55e", r: 5 }}
+              />
+              <ReferenceLine
+                yAxisId="rev"
+                y={REVENUE_TARGET}
+                stroke="#FF4500"
+                strokeDasharray="4 2"
+                strokeOpacity={0.4}
+                label={{ value: "$600k target", fill: "#FF4500", fontSize: 10, position: "insideTopLeft" }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* EBITDA waterfall explanation */}
@@ -128,7 +154,7 @@ export default function CashflowTab() {
             step="1"
             title="Fix Pricebook (biggest lever)"
             impact="+$97k EBITDA/month"
-            detail="68% of jobs below 15% margin. A 10pp margin improvement on $510k revenue = $51k extra. Full fix = $97k."
+            detail="68% of jobs below 15% margin. A 10pp margin improvement on revenue = $51k extra. Full fix = $97k."
             color="red"
           />
           <EbitdaAction
@@ -147,8 +173,15 @@ export default function CashflowTab() {
           />
         </div>
         <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
-          Combined effect: +$108k/month EBITDA improvement = approx <span className="font-bold">21% EBITDA at current revenue</span>.
-          Scale revenue to $625k simultaneously and 30% target is achievable by May 2026.
+          {data ? (
+            <>
+              Current net margin: <span className="font-bold">{data.netMarginPct.toFixed(1)}%</span>
+              {" — "}gap to 30% target: <span className="font-bold">{(30 - data.netMarginPct).toFixed(1)}pp</span>.
+              Combined improvement plan: +$108k/month EBITDA improvement.
+            </>
+          ) : (
+            "Combined effect: +$108k/month EBITDA improvement = approx 21% EBITDA at current revenue."
+          )}
         </div>
       </div>
 

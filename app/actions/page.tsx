@@ -1,6 +1,7 @@
 "use client";
+
 import { useState } from "react";
-import { BUSINESS_DATA as D } from "../data/business";
+import { useApi } from "../lib/use-api";
 
 type Action = {
   id: number;
@@ -11,6 +12,25 @@ type Action = {
   due: string;
   category: string;
 };
+
+type ExpensesData = { netProfit: number; netMarginPct: number; income: number };
+
+const CRITICAL_ACTIONS: Action[] = [
+  { id: 1, done: false, title: "Pause Emergency Plumbing campaign", impact: "$1,550/month saved", owner: "Marketing", due: "TODAY", category: "critical" },
+  { id: 2, done: false, title: "Fix Solar inspection pricebook", impact: "Immediate margin recovery", owner: "Operations", due: "TODAY", category: "critical" },
+  { id: 3, done: false, title: "Assign Alex Naughton to execute his own quotes", impact: "+$30K/month", owner: "Phillip", due: "TODAY", category: "critical" },
+];
+
+const HIGH_ACTIONS: Action[] = [
+  { id: 4, done: false, title: "Follow up 641 open quotes — assign to team", impact: "$3.9M pipeline", owner: "Sales", due: "This Week", category: "high" },
+  { id: 5, done: false, title: "Investigate Bradley Tinworth performance", impact: "$64K/month gap", owner: "Phillip", due: "This Week", category: "high" },
+  { id: 6, done: false, title: "Fix Xero→ST payment sync", impact: "$233K phantom AR resolved", owner: "IT/Finance", due: "This Week", category: "high" },
+];
+
+const GROWTH_ACTIONS: Action[] = [
+  { id: 7, done: false, title: "Scale Ducted AC campaigns", impact: "+$XX revenue at 21.6x ROAS", owner: "Marketing", due: "This Month", category: "growth" },
+  { id: 8, done: false, title: "Fix Sunday call abandonment (42% loss)", impact: "+$140K/month", owner: "Operations", due: "This Month", category: "growth" },
+];
 
 function ActionItem({ action, onToggle }: { action: Action; onToggle: (id: number) => void }) {
   const categoryColor =
@@ -61,9 +81,11 @@ function ActionItem({ action, onToggle }: { action: Action; onToggle: (id: numbe
 }
 
 export default function Actions() {
-  const [critical, setCritical] = useState(D.actions.critical);
-  const [high, setHigh] = useState(D.actions.high);
-  const [growth, setGrowth] = useState(D.actions.growth);
+  const [critical, setCritical] = useState(CRITICAL_ACTIONS);
+  const [high, setHigh]         = useState(HIGH_ACTIONS);
+  const [growth, setGrowth]     = useState(GROWTH_ACTIONS);
+
+  const { data: expenses } = useApi<ExpensesData>("/api/expenses", {});
 
   const toggle = (
     list: Action[],
@@ -85,6 +107,21 @@ export default function Actions() {
         <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">ACTIONS</div>
         <div className="text-sm text-gray-400">Priority Queue — tap to complete</div>
       </div>
+
+      {/* Live margin context */}
+      {expenses && (
+        <div className="card card-amber mb-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Live Net Margin (March)</span>
+            <span className="font-black text-yellow-400">{expenses.netMarginPct.toFixed(1)}%</span>
+          </div>
+          <div className="flex justify-between text-sm mt-1">
+            <span className="text-gray-400">Net Profit</span>
+            <span className="font-bold text-white">${expenses.netProfit.toLocaleString()}</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">Gap to 30% target: {(30 - expenses.netMarginPct).toFixed(1)}pp</div>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="card mb-4">
