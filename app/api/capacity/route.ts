@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
     const tenantId = process.env.ST_TENANT_ID!;
 
     const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
-      scheduledOnOrAfter: from.toISOString(),
-      scheduledBefore: to.toISOString(),
+      createdOnOrAfter: from.toISOString(),
+      createdBefore: to.toISOString(),
       pageSize: "500",
     }) as Record<string, unknown>[];
 

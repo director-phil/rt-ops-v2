@@ -1,10 +1,11 @@
-// ServiceTitan Auth — client credentials token cache
-
+// ServiceTitan Auth — client credentials token
+// Note: module-level cache doesn't persist across serverless cold starts
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
 
 export async function getSTToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiry - 30000) {
+  // In serverless environments, always refresh if we're close to expiry
+  if (cachedToken && Date.now() < tokenExpiry - 60000) {
     return cachedToken;
   }
 
@@ -16,6 +17,7 @@ export async function getSTToken(): Promise<string> {
       client_id: process.env.ST_CLIENT_ID!,
       client_secret: process.env.ST_CLIENT_SECRET!,
     }),
+    cache: "no-store",
   });
 
   if (!res.ok) {
@@ -43,7 +45,7 @@ export async function stFetch(path: string, params?: Record<string, string>) {
       Authorization: `Bearer ${token}`,
       "ST-App-Key": appKey,
     },
-    next: { revalidate: 300 }, // 5-min cache
+    cache: "no-store",
   });
 
   if (!res.ok) {
