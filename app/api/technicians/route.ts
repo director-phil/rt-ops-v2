@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stFetchAll } from "@/app/lib/st-fetch-all";
-import { getSTToken } from "@/app/lib/st-auth";
 import { getDateRange } from "@/app/lib/date-range";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +33,7 @@ const TECH_WHITELIST = new Set([
 
 function isTech(name: string): boolean {
   if (!name || name.includes("@")) return false;
-  return TECH_WHITELIST.has(name.toLowerCase());
+  return TECH_WHITELIST.has(name.trim().toLowerCase());
 }
 
 const parseNum = (v: unknown): number => {
@@ -44,66 +43,55 @@ const parseNum = (v: unknown): number => {
 
 async function fetchTechMetrics(from: string, to: string) {
   const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
 
-  // Step 1: Fetch completed jobs in range
-  const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
-    completedOnOrAfter: from,
-    completedBefore: to,
-    jobStatus: "Completed",
-    pageSize: "500",
-  }) as Record<string, unknown>[];
-
-  if (jobs.length === 0) return [];
-
-  // Step 2: For each job, get tech assignment via dispatch API
-  // Batch by fetching dispatch assignments with jobIds
-  const techMap: Record<string, {
-    name: string;
-    revenue: number;
-    jobCount: number;
-  }> = {};
-
-  // Process in batches of 50 to avoid rate limits
-  const BATCH = 50;
-  const token = await getSTToken();
-  const headers = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
-
-  for (let i = 0; i < jobs.length; i += BATCH) {
-    const batch = jobs.slice(i, i + BATCH);
-    
-    // Fetch dispatch assignments for these jobs in parallel
-    const assignments = await Promise.allSettled(
-      batch.map(async (job) => {
-        const jobId = job.id as number;
-        const total = parseNum(job.total);
-        
-        const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?jobId=${jobId}&pageSize=50`;
-        const res = await fetch(url, { headers, cache: "no-store" });
-        if (!res.ok) return { jobId, total, techName: null };
-        
-        const data = await res.json();
-        const assigns = (data.data || []) as Record<string, unknown>[];
-        // Get first active/done technician
-        const assign = assigns.find(a => a.status !== "Dismissed") || assigns[0];
-        const techName = assign ? (assign.technicianName as string) || null : null;
-        
-        return { jobId, total, techName };
-      })
-    );
-
-    for (const result of assignments) {
-      if (result.status !== "fulfilled") continue;
-      const { total, techName } = result.value;
-      if (!techName || !isTech(techName)) continue;
-      
-      const key = techName.toLowerCase();
-      if (!techMap[key]) {
-        techMap[key] = { name: techName, revenue: 0, jobCount: 0 };
-      }
-      techMap[key].revenue += total;
-      techMap[key].jobCount++;
+  // Step 1: bulk fetch all dispatch assignments in date range (2-3 API calls total)
+  const assignments = await stFetchAll(
+    `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
+    {
+      modifiedOnOrAfter: from,
+      modifiedBefore: to,
+      pageSize: "500",
     }
+  ) as Record<string, unknown>[];
+
+  // Build jobId → technicianName map
+  const jobToTech: Record<string, string> = {};
+  for (const a of assignments) {
+    const jobId = String(a.jobId);
+    const techName = (a.technicianName as string || "").trim();
+    // Only keep active/done assignments for whitelisted techs
+    if (a.status === "Dismissed" || !isTech(techName)) continue;
+    // If multiple techs on a job, keep the most recent (last one seen)
+    jobToTech[jobId] = techName;
+  }
+
+  if (Object.keys(jobToTech).length === 0) return [];
+
+  // Step 2: fetch completed jobs in range
+  const jobs = await stFetchAll(
+    `/jpm/v2/tenant/${tenantId}/jobs`,
+    {
+      completedOnOrAfter: from,
+      completedBefore: to,
+      jobStatus: "Completed",
+      pageSize: "500",
+    }
+  ) as Record<string, unknown>[];
+
+  // Step 3: aggregate revenue per tech
+  const techMap: Record<string, { name: string; revenue: number; jobCount: number }> = {};
+
+  for (const job of jobs) {
+    const jobId = String(job.id);
+    const techName = jobToTech[jobId];
+    if (!techName) continue;
+
+    const key = techName.toLowerCase();
+    if (!techMap[key]) {
+      techMap[key] = { name: techName, revenue: 0, jobCount: 0 };
+    }
+    techMap[key].revenue += parseNum(job.total);
+    techMap[key].jobCount++;
   }
 
   return Object.values(techMap);
@@ -135,7 +123,7 @@ export async function GET(req: NextRequest) {
       const progressPct = Math.min(100, Math.round((tech.revenue / COMMISSION_THRESHOLD) * 100));
 
       return {
-        name: tech.name,
+        name: tech.name.trim(),
         revenueMTD: Math.round(tech.revenue),
         prevRevenue: prev ? Math.round(prev.revenue) : null,
         revChange: revChange !== null ? Math.round(revChange) : null,

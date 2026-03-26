@@ -8,6 +8,21 @@ const COMMISSION_THRESHOLD = 80000;
 const NET_SALE_FACTOR = 0.95;
 const COMMISSION_RATE = 0.015;
 
+// Real field technicians only — no office/CSR/admin
+const TECH_WHITELIST = new Set([
+  "mitch powell", "romello moore", "curtis jeffrey", "kyle rootes",
+  "zachary lingard", "zach lingard", "dean retra", "hayden sibley",
+  "scott gullick", "lachlan henzell", "rusty daniells",
+  "bradley tinworth mt", "bradley tinworth", "kristian calcagno",
+  "alex naughton", "david white", "bailey somerville",
+  "daniel hayes", "alex peisler",
+]);
+
+function isTech(name: string): boolean {
+  if (!name || name.includes("@")) return false;
+  return TECH_WHITELIST.has(name.trim().toLowerCase());
+}
+
 const parseNum = (v: unknown): number => {
   const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
   return isNaN(n) ? 0 : n;
@@ -21,83 +36,77 @@ export async function GET(req: NextRequest) {
   try {
     const tenantId = process.env.ST_TENANT_ID!;
 
-    const invoices = await stFetchAll(`/accounting/v2/tenant/${tenantId}/invoices`, {
-      createdOnOrAfter: range.from,
-      createdBefore: range.to,
-      active: "True",
-      pageSize: "500",
-    }) as Record<string, unknown>[];
-
-    // Aggregate per tech using employeeInfo (performer/installer)
-    // soldById from job.soldById → but we don't have that from invoice directly
-    // Use employeeInfo as installer, soldBy as salesman if different
-    const techData: Record<string, {
-      id: string;
-      name: string;
-      grossAsInstaller: number;
-      grossAsSalesman: number;
-      totalGross: number;
-      invoiceCount: number;
-    }> = {};
-
-    const ensureTech = (id: string, name: string) => {
-      if (!techData[id]) {
-        techData[id] = { id, name, grossAsInstaller: 0, grossAsSalesman: 0, totalGross: 0, invoiceCount: 0 };
+    // Step 1: bulk fetch dispatch assignments for period
+    const assignments = await stFetchAll(
+      `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
+      {
+        modifiedOnOrAfter: range.from,
+        modifiedBefore: range.to,
+        pageSize: "500",
       }
-    };
+    ) as Record<string, unknown>[];
 
-    for (const inv of invoices) {
-      const revenue = parseNum(inv.total);
-      const isPaid = ["paid", "sent"].includes(((inv.sentStatus as string) || "").toLowerCase());
-
-      const empInfo = inv.employeeInfo as Record<string, unknown> | null;
-      const assignedTo = inv.assignedTo as Record<string, unknown> | null;
-      const createdBy = inv.createdBy as Record<string, unknown> | null;
-
-      // Installer = employeeInfo (tech who did the job)
-      const installer = empInfo || assignedTo;
-      if (installer?.id) {
-        const id = String(installer.id);
-        const name = (installer.name as string) || "Unknown";
-        ensureTech(id, name);
-        techData[id].grossAsInstaller += revenue;
-        techData[id].totalGross += revenue;
-        techData[id].invoiceCount++;
-      }
-
-      // Salesman = soldById from the job (not available on invoice directly)
-      // If different from installer, we'd add separately
-      // For now use same tech as both salesman and installer (common for trade)
+    // jobId → technicianName (field techs only)
+    const jobToTech: Record<string, string> = {};
+    for (const a of assignments) {
+      if (a.status === "Dismissed") continue;
+      const techName = ((a.technicianName as string) || "").trim();
+      if (!isTech(techName)) continue;
+      jobToTech[String(a.jobId)] = techName;
     }
 
-    const techResults = Object.values(techData).map(tech => {
-      const meetsThreshold = tech.totalGross >= COMMISSION_THRESHOLD;
+    // Step 2: fetch completed jobs for revenue
+    const jobs = await stFetchAll(
+      `/jpm/v2/tenant/${tenantId}/jobs`,
+      {
+        completedOnOrAfter: range.from,
+        completedBefore: range.to,
+        jobStatus: "Completed",
+        pageSize: "500",
+      }
+    ) as Record<string, unknown>[];
 
-      const installerNetValue = tech.grossAsInstaller * NET_SALE_FACTOR;
-      const salesmanNetValue = tech.grossAsSalesman * NET_SALE_FACTOR;
-      const installerCommission = meetsThreshold ? installerNetValue * COMMISSION_RATE : 0;
-      const salesmanCommission = meetsThreshold ? salesmanNetValue * COMMISSION_RATE : 0;
+    // Step 3: aggregate per tech
+    const techMap: Record<string, {
+      name: string;
+      revenue: number;
+      jobCount: number;
+    }> = {};
+
+    for (const job of jobs) {
+      const jobId = String(job.id);
+      const techName = jobToTech[jobId];
+      if (!techName) continue;
+
+      const key = techName.toLowerCase();
+      if (!techMap[key]) {
+        techMap[key] = { name: techName.trim(), revenue: 0, jobCount: 0 };
+      }
+      techMap[key].revenue += parseNum(job.total);
+      techMap[key].jobCount++;
+    }
+
+    const techResults = Object.values(techMap).map(tech => {
+      const meetsThreshold = tech.revenue >= COMMISSION_THRESHOLD;
+      const netValue = tech.revenue * NET_SALE_FACTOR;
+      // 1.5% for doing + 1.5% for selling (assume both for field techs)
+      const installerCommission = meetsThreshold ? netValue * COMMISSION_RATE : 0;
+      const salesmanCommission = 0; // Requires sold-by data not available here
       const totalCommission = installerCommission + salesmanCommission;
-      const progressPct = Math.min(100, Math.round((tech.totalGross / COMMISSION_THRESHOLD) * 100));
-
-      const role = tech.grossAsSalesman > 0 && tech.grossAsInstaller > 0
-        ? "Both"
-        : tech.grossAsSalesman > 0 ? "Salesman" : "Installer";
+      const progressPct = Math.min(100, Math.round((tech.revenue / COMMISSION_THRESHOLD) * 100));
 
       return {
-        techId: tech.id,
         name: tech.name,
-        role,
-        grossJobsValue: Math.round(tech.totalGross),
-        netValue: Math.round(tech.totalGross * NET_SALE_FACTOR),
-        salesmanGross: Math.round(tech.grossAsSalesman),
-        installerGross: Math.round(tech.grossAsInstaller),
-        salesmanCommission: Math.round(salesmanCommission * 100) / 100,
+        role: "Installer",
+        grossJobsValue: Math.round(tech.revenue),
+        netValue: Math.round(netValue),
         installerCommission: Math.round(installerCommission * 100) / 100,
+        salesmanCommission: 0,
         totalCommission: Math.round(totalCommission * 100) / 100,
+        jobCount: tech.jobCount,
         meetsThreshold,
         progressPct,
-        thresholdGap: Math.max(0, Math.round(COMMISSION_THRESHOLD - tech.totalGross)),
+        thresholdGap: Math.max(0, Math.round(COMMISSION_THRESHOLD - tech.revenue)),
       };
     }).sort((a, b) => b.grossJobsValue - a.grossJobsValue);
 

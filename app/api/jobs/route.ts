@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stFetchAll } from "@/app/lib/st-fetch-all";
-import { getSTToken } from "@/app/lib/st-auth";
 import { getDateRange, parseTrade } from "@/app/lib/date-range";
 
 export const dynamic = "force-dynamic";
 
 const NET_SALE_FACTOR = 0.95;
 const MARGIN_FLOOR = 0.15;
-const MAT_VARIANCE_FLAG_PCT = 0.10;
+
+// Business unit ID → trade name mapping (from ST data)
+const BU_TRADE_MAP: Record<number, string> = {
+  115365: "AC/HVAC",
+  134689640: "Electrical",
+  // Additional BUs will fall through to "Other"
+};
 
 function normalizeTrade(buName: string): string {
-  const n = buName.toLowerCase();
+  const n = (buName || "").toLowerCase();
   if (n.includes("electrical")) return "Electrical";
   if (n.includes("hvac") || n.includes("air") || n.includes("ac")) return "AC/HVAC";
   if (n.includes("solar") || n.includes("battery")) return "Solar";
@@ -26,122 +31,99 @@ export async function GET(req: NextRequest) {
 
   const range = getDateRange(dateParam);
   const trade = parseTrade(tradeParam);
-  const staffFilter = (staffParam && staffParam !== "All Staff") ? staffParam.toLowerCase().replace(/-/g, " ") : null;
+  const staffFilter = (staffParam && staffParam !== "All Staff")
+    ? staffParam.toLowerCase().replace(/-/g, " ")
+    : null;
 
   try {
     const tenantId = process.env.ST_TENANT_ID!;
-    const appKey = process.env.ST_APP_KEY!;
 
-    const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
-      completedOnOrAfter: range.from,
-      completedBefore: range.to,
-      jobStatus: "Completed",
-      pageSize: "500",
-    }) as Record<string, unknown>[];
-
-    // Fetch dispatch assignments for all jobs in parallel (batched)
-    const token = await getSTToken();
-    const headers = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
-    const BATCH = 50;
-    const techByJobId: Record<string, string> = {};
-
-    for (let i = 0; i < jobs.length; i += BATCH) {
-      const batch = jobs.slice(i, i + BATCH);
-      const results = await Promise.allSettled(
-        batch.map(async (job) => {
-          const jobId = job.id as number;
-          const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?jobId=${jobId}&pageSize=10`;
-          const res = await fetch(url, { headers, cache: "no-store" });
-          if (!res.ok) return { jobId: String(jobId), techName: "Unassigned" };
-          const data = await res.json();
-          const assigns = (data.data || []) as Record<string, unknown>[];
-          const assign = assigns.find(a => a.status !== "Dismissed") || assigns[0];
-          return {
-            jobId: String(jobId),
-            techName: assign ? (assign.technicianName as string) || "Unassigned" : "Unassigned",
-          };
-        })
-      );
-      for (const r of results) {
-        if (r.status === "fulfilled") {
-          techByJobId[r.value.jobId] = r.value.techName;
-        }
+    // Bulk fetch dispatch assignments for the period (efficient: 2-3 calls)
+    const assignments = await stFetchAll(
+      `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
+      {
+        modifiedOnOrAfter: range.from,
+        modifiedBefore: range.to,
+        pageSize: "500",
       }
+    ) as Record<string, unknown>[];
+
+    // jobId → techName
+    const jobToTech: Record<string, string> = {};
+    for (const a of assignments) {
+      if (a.status === "Dismissed") continue;
+      const jobId = String(a.jobId);
+      const techName = ((a.technicianName as string) || "").trim();
+      if (techName) jobToTech[jobId] = techName;
     }
 
-    // Filter by trade
-    let filtered = jobs;
-    if (trade) {
-      filtered = filtered.filter(j => {
-        const buId = (j.businessUnitId as number) || 0;
-        // We don't have BU name here - will need to resolve via buId or skip trade filter for now
-        return true; // TODO: resolve BU names
-      });
-    }
-    if (staffFilter) {
-      filtered = filtered.filter(j => {
-        const techName = techByJobId[String(j.id)] || "";
-        return techName.toLowerCase().includes(staffFilter);
-      });
+    // Fetch completed jobs
+    const jobs = await stFetchAll(
+      `/jpm/v2/tenant/${tenantId}/jobs`,
+      {
+        completedOnOrAfter: range.from,
+        completedBefore: range.to,
+        jobStatus: "Completed",
+        pageSize: "500",
+      }
+    ) as Record<string, unknown>[];
+
+    // Fetch business unit names for trade mapping
+    let buMap: Record<number, string> = {};
+    try {
+      const buData = await stFetchAll(
+        `/jpm/v2/tenant/${tenantId}/business-units`,
+        { pageSize: "200" }
+      ) as Record<string, unknown>[];
+      for (const bu of buData) {
+        buMap[Number(bu.id)] = String(bu.name || "");
+      }
+    } catch {
+      // BU names optional — fall back to ID-based map
+      buMap = BU_TRADE_MAP as unknown as Record<number, string>;
     }
 
-    const enriched = filtered.map(job => {
-      const techName = techByJobId[String(job.id)] || "Unassigned";
-      const invoiceTotal = (job.total as number) || 0;
+    const parseNum = (v: unknown): number => {
+      const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
+      return isNaN(n) ? 0 : n;
+    };
+
+    let enriched = jobs.map(job => {
+      const techName = jobToTech[String(job.id)] || "Unassigned";
+      const buId = Number(job.businessUnitId) || 0;
+      const buName = buMap[buId] || "";
+      const tradeName = normalizeTrade(buName);
+      const invoiceTotal = parseNum(job.total);
       const netSale = invoiceTotal * NET_SALE_FACTOR;
-
-      // Labour data - ST jobs v2 doesn't include these directly, use estimates
-      const labourHours = 0;
-      const labourCost = 0;
-      const effectiveRate = null;
-
-      // Materials - not in jobs v2 either
-      const estMaterials = 0;
-      const actMaterials = 0;
-      const matVariance = 0;
-      const matVariancePct = 0;
-      const matFlag = false;
-
-      const marginDollar = invoiceTotal - labourCost - actMaterials;
-      const marginPct = invoiceTotal > 0 ? (marginDollar / invoiceTotal) * 100 : 0;
-      const marginFlag = marginPct < MARGIN_FLOOR * 100;
+      const marginPct = 100; // We don't have cost breakdown from jobs v2
+      const marginFlag = invoiceTotal < 100; // Flag tiny jobs
 
       return {
         jobId: String(job.id),
         jobNumber: (job.jobNumber as string) || String(job.id),
         date: (job.completedOn as string) || (job.createdOn as string) || "",
         tech: techName,
-        trade: "Other", // TODO: resolve BU name to trade
+        trade: tradeName,
         invoiceTotal: Math.round(invoiceTotal),
         netSale: Math.round(netSale),
-        labourHours,
-        labourCost,
-        estMaterials,
-        actMaterials,
-        matVariance,
-        matVariancePct,
-        matFlag,
-        marginDollar: Math.round(marginDollar),
-        marginPct: Math.round(marginPct * 10) / 10,
         marginFlag,
-        effectiveRate,
       };
     });
 
-    enriched.sort((a, b) => a.marginPct - b.marginPct);
+    // Apply filters
+    if (trade) {
+      enriched = enriched.filter(j => j.trade.toLowerCase().replace("/", "").replace("-", "") === trade.replace("/", "").replace("-", ""));
+    }
+    if (staffFilter) {
+      enriched = enriched.filter(j => j.tech.toLowerCase().includes(staffFilter));
+    }
+
+    enriched.sort((a, b) => b.invoiceTotal - a.invoiceTotal);
 
     const totals = {
       jobs: enriched.length,
       totalRevenue: enriched.reduce((s, j) => s + j.invoiceTotal, 0),
       totalNetSale: enriched.reduce((s, j) => s + j.netSale, 0),
-      totalLabourCost: enriched.reduce((s, j) => s + j.labourCost, 0),
-      totalMaterials: enriched.reduce((s, j) => s + j.actMaterials, 0),
-      totalMarginDollar: enriched.reduce((s, j) => s + j.marginDollar, 0),
-      avgMarginPct: enriched.length > 0
-        ? Math.round((enriched.reduce((s, j) => s + j.marginPct, 0) / enriched.length) * 10) / 10
-        : 0,
-      below15Count: enriched.filter(j => j.marginFlag).length,
-      matFlagCount: enriched.filter(j => j.matFlag).length,
     };
 
     return NextResponse.json({
@@ -155,7 +137,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/jobs]", msg);
     return NextResponse.json({ ok: false, error: msg, updatedAt: new Date().toISOString() }, { status: 500 });
   }
 }
