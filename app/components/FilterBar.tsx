@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useCallback } from "react";
 import { RefreshCw, ChevronDown } from "lucide-react";
-import { STAFF_MEMBERS } from "@/app/data/staticData";
+import { useApi } from "@/app/lib/use-api";
+
+interface TechData { technicians: { name: string }[] }
 
 const DATE_OPTIONS = [
   { value: "today",     label: "Today" },
@@ -31,6 +33,8 @@ export default function FilterBar({ onRefresh, refreshing, onFilterChange }: Fil
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const { data: techData } = useApi<TechData>("/api/technicians", {});
+  const staffMembers = ["All Staff", ...(techData?.technicians?.map(t => t.name) ?? [])];
 
   const date     = params.get("date")   || "mtd";
   const trade    = params.get("trade")  || "all";
@@ -82,7 +86,7 @@ export default function FilterBar({ onRefresh, refreshing, onFilterChange }: Fil
           onChange={e => setParam("staff", e.target.value)}
           className="appearance-none bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-orange-500 focus:outline-none focus:border-orange-500 transition-colors"
         >
-          {STAFF_MEMBERS.map(s => (
+          {staffMembers.map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>

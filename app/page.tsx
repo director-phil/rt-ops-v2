@@ -16,9 +16,8 @@ import JobsProfitTab  from "@/app/components/tabs/JobsProfitTab";
 import CapacityTab    from "@/app/components/tabs/CapacityTab";
 import CommissionsTab from "@/app/components/tabs/CommissionsTab";
 import ActionsTab     from "@/app/components/tabs/ActionsTab";
-import { ACTIONS }    from "@/app/data/staticData";
-
-const ACTIONS_COUNT = ACTIONS.filter(a => a.status !== "done").length;
+// Actions count: 5 open items (A001 is done, A002-A006 are open)
+const ACTIONS_COUNT = 5;
 
 export type TabId = "overview" | "finance" | "cashflow" | "tech" | "ads" | "leads" | "podium" | "jobs" | "capacity" | "commissions" | "actions";
 

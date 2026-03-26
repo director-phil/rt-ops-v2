@@ -1,8 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { ACTIONS } from "@/app/data/staticData";
-import type { Action, ActionPriority, ActionStatus } from "@/app/data/staticData";
+// Actions are editorial priorities — manually curated, not live data
+// They live here inline so no static data file needed
+
+type ActionPriority = "critical" | "high" | "medium" | "low";
+type ActionStatus = "open" | "in_progress" | "done";
+interface Action {
+  id: string;
+  priority: ActionPriority;
+  title: string;
+  detail: string;
+  owner: string;
+  status: ActionStatus;
+  impact?: string;
+}
+
+const ACTIONS: Action[] = [
+  { id: "A001", priority: "critical", title: "✅ DONE — Emergency Plumbing Google Ads PAUSED", detail: "Confirmed PAUSED. Spent $1,550 with 0 conversions before pause. Monitor for 30 days before decision to kill permanently.", owner: "Marketing", status: "done", impact: "$1,550/month saved" },
+  { id: "A002", priority: "critical", title: "Fix Pricebook — 68% of jobs below 15% margin", detail: "Solar at 10.2%, AC Repair at 13.8%. Every job dispatched at these rates loses money on commission and margin floor. Fix pricing before next dispatch run.", owner: "Operations", status: "open", impact: "Margin bleeding on every job" },
+  { id: "A003", priority: "critical", title: "Fix Apprentice Splits in ServiceTitan", detail: "152 jobs in Feb/March have apprentices incorrectly listed as co-techs. Affecting $601K revenue and blocking commission calculations. Fix assignment process going forward.", owner: "Operations", status: "open", impact: "$601K revenue affected" },
+  { id: "A004", priority: "high", title: "Fix Alex Naughton Dispatch", detail: "He sold $27K in estimates but is being dispatched to low-value plumbing quotes. Move him to execute his own electrical/AC quotes.", owner: "Dispatch", status: "open", impact: "+$30K/month" },
+  { id: "A005", priority: "high", title: "Follow up 641 open quotes ($3.9M)", detail: "Assign to sales team immediately. These are live opportunities going cold every day.", owner: "Sales", status: "open", impact: "$3.9M pipeline" },
+  { id: "A006", priority: "high", title: "Scale Ducted AC campaigns", detail: "21.6x ROAS — dramatically underfunded. Increase budget aggressively.", owner: "Marketing", status: "open", impact: "+$X revenue" },
+];
 
 const PRIORITY_CONFIG: Record<ActionPriority, { label: string; color: string; bg: string; border: string }> = {
   critical: { label: "CRITICAL", color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-500/40" },
