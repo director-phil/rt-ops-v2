@@ -62,14 +62,12 @@ interface CsrsResponse {
 }
 
 export default function CommissionsTab({ refreshKey }: { refreshKey?: number }) {
-  const params = useSearchParams();
-  const date = params.get("date") || "mtd";
-
+  // Commission is always MTD — threshold is monthly, "today" makes no sense for commissions
   const { data: commData, loading: commLoading, error: commError, updatedAt: commUpdated } =
-    useApi<CommissionsResponse>("/api/commissions", { date }, refreshKey);
+    useApi<CommissionsResponse>("/api/commissions", { date: "mtd" }, refreshKey);
 
   const { data: csrData, loading: csrLoading, error: csrError, updatedAt: csrUpdated } =
-    useApi<CsrsResponse>("/api/csrs", { date }, refreshKey);
+    useApi<CsrsResponse>("/api/csrs", { date: "mtd" }, refreshKey);
 
   const [showNonEarners, setShowNonEarners] = useState(false);
 
@@ -109,7 +107,7 @@ export default function CommissionsTab({ refreshKey }: { refreshKey?: number }) 
 
       {/* Summary KPIs */}
       <DataPanel
-        title={`Commission Summary · ${commData?.period || date.toUpperCase()}`}
+        title={`Commission Summary · ${commData?.period || "MTD"}`}
         source="ServiceTitan"
         updatedAt={commUpdated}
         loading={commLoading}
