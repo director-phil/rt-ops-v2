@@ -5,7 +5,6 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import FilterBar from "@/app/components/FilterBar";
 import Sidebar from "@/app/components/Sidebar";
 
-// Tab content imports
 import OverviewTab    from "@/app/components/tabs/OverviewTab";
 import FinanceTab     from "@/app/components/tabs/FinanceTab";
 import CashflowTab    from "@/app/components/tabs/CashflowTab";
@@ -16,6 +15,9 @@ import JobsProfitTab  from "@/app/components/tabs/JobsProfitTab";
 import CapacityTab    from "@/app/components/tabs/CapacityTab";
 import CommissionsTab from "@/app/components/tabs/CommissionsTab";
 import ActionsTab     from "@/app/components/tabs/ActionsTab";
+import { ACTIONS }    from "@/app/data/staticData";
+
+const ACTIONS_COUNT = ACTIONS.filter(a => a.status !== "done").length;
 
 export type TabId = "overview" | "finance" | "cashflow" | "tech" | "ads" | "leads" | "jobs" | "capacity" | "commissions" | "actions";
 
@@ -39,13 +41,22 @@ function sidebarSection(tab: TabId): "overview" | "techs" | "finance" | "leads" 
   return "overview";
 }
 
+function DataFreshnessDot({ syncTime }: { syncTime: Date | null }) {
+  if (!syncTime) return <span className="w-2 h-2 rounded-full bg-zinc-600 inline-block" title="No sync yet" />;
+  const diffMin = (new Date().getTime() - syncTime.getTime()) / 60000;
+  if (diffMin < 5) return <span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse" title="Fresh" />;
+  if (diffMin < 30) return <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" title="Aging" />;
+  return <span className="w-2 h-2 rounded-full bg-red-400 inline-block" title="Stale" />;
+}
+
 function DashboardInner() {
-  const router     = useRouter();
-  const pathname   = usePathname();
-  const params     = useSearchParams();
-  const activeTab  = (params.get("tab") || "overview") as TabId;
+  const router    = useRouter();
+  const pathname  = usePathname();
+  const params    = useSearchParams();
+  const activeTab = (params.get("tab") || "overview") as TabId;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
   const setTab = (id: TabId) => {
     const p = new URLSearchParams(params.toString());
@@ -57,10 +68,9 @@ function DashboardInner() {
     setRefreshing(true);
     setRefreshKey(k => k + 1);
     await new Promise(r => setTimeout(r, 1200));
+    setLastSync(new Date());
     setRefreshing(false);
   }, []);
-
-  const openActions = ACTIONS_COUNT; // badge
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#0a0a0a" }}>
@@ -69,8 +79,10 @@ function DashboardInner() {
         <span className="text-white font-black text-sm tracking-tight">⚡ RT OPS</span>
         <span className="text-white/70 text-xs hidden sm:inline">Reliable Tradies · Operations Platform</span>
         <div className="ml-auto flex items-center gap-2 text-white/80 text-xs">
-          <span className="hidden md:inline">MTD Feb 26</span>
-          <span className="bg-white/20 rounded px-2 py-0.5 font-bold">$510,216</span>
+          <DataFreshnessDot syncTime={lastSync} />
+          <span className="hidden md:inline text-white/60">
+            {lastSync ? `Synced ${lastSync.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}` : "Awaiting sync"}
+          </span>
         </div>
       </div>
 
@@ -92,9 +104,9 @@ function DashboardInner() {
           >
             <span>{tab.icon}</span>
             <span className="hidden sm:inline">{tab.label}</span>
-            {tab.id === "actions" && openActions > 0 && (
+            {tab.id === "actions" && ACTIONS_COUNT > 0 && (
               <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {openActions > 9 ? "9+" : openActions}
+                {ACTIONS_COUNT > 9 ? "9+" : ACTIONS_COUNT}
               </span>
             )}
           </button>
@@ -106,25 +118,21 @@ function DashboardInner() {
         <Sidebar section={sidebarSection(activeTab)} />
 
         <main className="flex-1 overflow-y-auto" key={`${activeTab}-${refreshKey}`}>
-          {activeTab === "overview"    && <OverviewTab />}
-          {activeTab === "finance"     && <FinanceTab />}
+          {activeTab === "overview"    && <OverviewTab    refreshKey={refreshKey} />}
+          {activeTab === "finance"     && <FinanceTab     refreshKey={refreshKey} />}
           {activeTab === "cashflow"    && <CashflowTab />}
-          {activeTab === "tech"        && <TechTab />}
-          {activeTab === "ads"         && <GoogleAdsTab />}
-          {activeTab === "leads"       && <LeadsTab />}
-          {activeTab === "jobs"        && <JobsProfitTab />}
-          {activeTab === "capacity"    && <CapacityTab />}
-          {activeTab === "commissions" && <CommissionsTab />}
+          {activeTab === "tech"        && <TechTab        refreshKey={refreshKey} />}
+          {activeTab === "ads"         && <GoogleAdsTab   refreshKey={refreshKey} />}
+          {activeTab === "leads"       && <LeadsTab       refreshKey={refreshKey} />}
+          {activeTab === "jobs"        && <JobsProfitTab  refreshKey={refreshKey} />}
+          {activeTab === "capacity"    && <CapacityTab    refreshKey={refreshKey} />}
+          {activeTab === "commissions" && <CommissionsTab refreshKey={refreshKey} />}
           {activeTab === "actions"     && <ActionsTab />}
         </main>
       </div>
     </div>
   );
 }
-
-// Count open+in_progress actions for badge
-import { ACTIONS } from "@/app/data/staticData";
-const ACTIONS_COUNT = ACTIONS.filter(a => a.status !== "done").length;
 
 export default function DashboardPage() {
   return (

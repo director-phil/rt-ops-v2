@@ -1,91 +1,118 @@
-import { NextResponse } from "next/server";
-import { stFetch } from "@/app/lib/st-auth";
+import { NextRequest, NextResponse } from "next/server";
+import { stFetchAll } from "@/app/lib/st-fetch-all";
+import { getDateRange } from "@/app/lib/date-range";
 
 export const dynamic = "force-dynamic";
 
-function getMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return {
-    from: start.toISOString(),
-    to: now.toISOString(),
-  };
+const COMMISSION_THRESHOLD = 80000;
+const NET_SALE_FACTOR = 0.95;
+const COMMISSION_RATE = 0.015;
+
+async function fetchTechMetrics(from: string, to: string) {
+  const tenantId = process.env.ST_TENANT_ID!;
+
+  const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
+    createdOnOrAfter: from,
+    createdBefore: to,
+    jobStatus: "Completed",
+    pageSize: "500",
+  }) as Record<string, unknown>[];
+
+  const techMap: Record<number, {
+    id: number;
+    name: string;
+    revenue: number;
+    jobs: number;
+    hours: number;
+    recalls: number;
+  }> = {};
+
+  for (const job of jobs) {
+    const assignments = (job.assignments as Record<string, unknown>[]) || [];
+    for (const a of assignments) {
+      const tech = a.technician as Record<string, unknown>;
+      if (!tech?.id) continue;
+      const id = tech.id as number;
+      if (!techMap[id]) {
+        techMap[id] = { id, name: (tech.name as string) || "Unknown", revenue: 0, jobs: 0, hours: 0, recalls: 0 };
+      }
+      techMap[id].revenue += (job.total as number) || 0;
+      techMap[id].jobs++;
+      techMap[id].hours += (job.duration as number) || 0;
+      if (((job.jobTypeName as string) || "").toLowerCase().includes("recall")
+          || ((job.tags as string[]) || []).some((t: string) => t.toLowerCase().includes("recall"))) {
+        techMap[id].recalls++;
+      }
+    }
+  }
+
+  return Object.values(techMap);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
+  const dateParam = searchParams.get("date");
+  const range = getDateRange(dateParam);
+
   try {
-    const tenantId = process.env.ST_TENANT_ID!;
-    const { from, to } = getMonthRange();
+    const [current, previous] = await Promise.all([
+      fetchTechMetrics(range.from, range.to),
+      fetchTechMetrics(range.prevFrom, range.prevTo),
+    ]);
 
-    // Fetch active technicians
-    const techsData = await stFetch(`/hrm/v2/tenant/${tenantId}/employees`, {
-      active: "True",
-      pageSize: "200",
-    });
+    const prevMap = new Map(previous.map(t => [t.name, t]));
 
-    const employees = techsData.data || [];
+    const technicians = current.map(tech => {
+      const prev = prevMap.get(tech.name);
+      const revChange = prev ? tech.revenue - prev.revenue : null;
+      const revChangePct = prev && prev.revenue > 0 ? ((tech.revenue - prev.revenue) / prev.revenue) * 100 : null;
 
-    // Fetch completed jobs for the month with assigned tech info
-    const jobsData = await stFetch(`/jpm/v2/tenant/${tenantId}/jobs`, {
-      createdOnOrAfter: from,
-      createdBefore: to,
-      jobStatus: "Completed",
-      pageSize: "500",
-    });
+      const netSale = tech.revenue * NET_SALE_FACTOR;
+      const meetsThreshold = tech.revenue >= COMMISSION_THRESHOLD;
+      const commission = meetsThreshold ? netSale * COMMISSION_RATE : 0;
+      const progressPct = Math.min(100, Math.round((tech.revenue / COMMISSION_THRESHOLD) * 100));
+      const revPerHr = tech.hours > 0 ? Math.round(tech.revenue / tech.hours) : null;
 
-    const jobs = jobsData.data || [];
+      return {
+        id: tech.id,
+        name: tech.name,
+        revenueMTD: Math.round(tech.revenue),
+        prevRevenue: prev ? Math.round(prev.revenue) : null,
+        revChange: revChange !== null ? Math.round(revChange) : null,
+        revChangePct: revChangePct !== null ? Math.round(revChangePct * 10) / 10 : null,
+        jobCount: tech.jobs,
+        hoursWorked: Math.round(tech.hours * 10) / 10,
+        revPerHr,
+        recalls: tech.recalls,
+        commission: Math.round(commission * 100) / 100,
+        meetsThreshold,
+        progressPct,
+        thresholdGap: Math.max(0, Math.round(COMMISSION_THRESHOLD - tech.revenue)),
+      };
+    }).sort((a, b) => b.revenueMTD - a.revenueMTD);
 
-    // Build revenue per tech from job assignments
-    const techRevenue: Record<number, { revenue: number; jobs: number; name: string; role: string }> = {};
-
-    for (const job of jobs) {
-      const assignments = job.assignments || [];
-      for (const assignment of assignments) {
-        const techId = assignment.technician?.id;
-        const techName = assignment.technician?.name || "Unknown";
-        if (!techId) continue;
-
-        if (!techRevenue[techId]) {
-          techRevenue[techId] = { revenue: 0, jobs: 0, name: techName, role: "" };
-        }
-        techRevenue[techId].revenue += job.total || 0;
-        techRevenue[techId].jobs++;
-      }
+    if (technicians.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        period: range.label,
+        technicians: [],
+        noData: true,
+        updatedAt: new Date().toISOString(),
+        source: "ServiceTitan",
+      });
     }
-
-    // Enrich with employee data
-    for (const emp of employees) {
-      if (techRevenue[emp.id]) {
-        techRevenue[emp.id].role = emp.jobTitle || emp.role || "";
-      }
-    }
-
-    // Sort by revenue desc
-    const technicians = Object.entries(techRevenue)
-      .map(([id, data]) => ({
-        id: Number(id),
-        name: data.name,
-        role: data.role,
-        revenueMTD: Math.round(data.revenue),
-        jobCount: data.jobs,
-        target: 46000,
-        pctOfTarget: Math.round((data.revenue / 46000) * 100),
-        onTarget: data.revenue >= 46000,
-      }))
-      .sort((a, b) => b.revenueMTD - a.revenueMTD);
 
     return NextResponse.json({
       ok: true,
-      month: new Date().toLocaleString("en-AU", { month: "long", year: "numeric" }),
+      period: range.label,
+      commissionThreshold: COMMISSION_THRESHOLD,
       technicians,
-      totalTechs: technicians.length,
-      onTarget: technicians.filter((t) => t.onTarget).length,
-      target: 46000,
       updatedAt: new Date().toISOString(),
+      source: "ServiceTitan",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[/api/technicians]", msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg, updatedAt: new Date().toISOString() }, { status: 500 });
   }
 }

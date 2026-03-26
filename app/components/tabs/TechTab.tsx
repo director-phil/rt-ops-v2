@@ -1,82 +1,138 @@
 "use client";
 
-import TechScorecard from "@/app/components/TechScorecard";
-import { TECHNICIANS } from "@/app/data/staticData";
+import { useSearchParams } from "next/navigation";
+import { useApi } from "@/app/lib/use-api";
+import DataPanel from "@/app/components/DataPanel";
 
-const topPerformers  = TECHNICIANS.filter(t => t.efficiency >= 70).length;
-const atRisk         = TECHNICIANS.filter(t => t.efficiency < 30).length;
-const highRecalls    = TECHNICIANS.filter(t => t.recalls >= 3).length;
-const totalRevenue   = TECHNICIANS.reduce((s, t) => s + t.revenue, 0);
+interface Technician {
+  id: number;
+  name: string;
+  revenueMTD: number;
+  prevRevenue: number | null;
+  revChange: number | null;
+  revChangePct: number | null;
+  jobCount: number;
+  hoursWorked: number;
+  revPerHr: number | null;
+  recalls: number;
+  commission: number;
+  meetsThreshold: boolean;
+  progressPct: number;
+  thresholdGap: number;
+}
 
-export default function TechTab() {
+interface TechResponse {
+  ok: boolean;
+  period: string;
+  commissionThreshold: number;
+  technicians: Technician[];
+  noData?: boolean;
+  updatedAt: string;
+  source: string;
+  error?: string;
+}
+
+export default function TechTab({ refreshKey }: { refreshKey?: number }) {
+  const params = useSearchParams();
+  const date  = params.get("date") || "mtd";
+  const staff = params.get("staff") || "All Staff";
+
+  const { data, loading, error, updatedAt } =
+    useApi<TechResponse>("/api/technicians", { date }, refreshKey);
+
+  const techs = data?.technicians?.filter(t =>
+    staff === "All Staff" || t.name.toLowerCase().includes(staff.toLowerCase().replace(/-/g, " "))
+  ) || [];
+
   return (
     <div className="p-4 lg:p-6 space-y-5">
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <TechKpi label="Total Field Techs"       value={`${TECHNICIANS.length}`}          sub="Active this month" color="white"  />
-        <TechKpi label="Top Performers (70%+ eff)" value={`${topPerformers}`}             sub="Efficiency ≥ 70%"  color="green"  />
-        <TechKpi label="At Risk (<30% eff)"       value={`${atRisk}`}                     sub="Need coaching"     color="red"    />
-        <TechKpi label="Recall Alerts"            value={`${highRecalls} tech(s)`}        sub="3+ recalls/month"  color="amber"  />
-      </div>
+      <DataPanel
+        title={`Technician Performance · ${data?.period || date.toUpperCase()}`}
+        source="ServiceTitan"
+        updatedAt={updatedAt}
+        loading={loading}
+        error={error}
+      >
+        {data?.noData ? (
+          <div className="p-8 text-center text-zinc-600">No tech data for this period</div>
+        ) : techs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-800/30">
+                  <th className="text-left px-4 py-3 text-xs font-bold uppercase text-zinc-500">Technician</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Revenue MTD</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">vs Last Month</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Jobs</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Hours</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">$/hr</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Recalls</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Commission</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold uppercase text-zinc-500">Progress to $80k</th>
+                </tr>
+              </thead>
+              <tbody>
+                {techs.map(t => {
+                  const isPositive = (t.revChange || 0) > 0;
+                  const isNegative = (t.revChange || 0) < 0;
+                  return (
+                    <tr key={t.id || t.name} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                      <td className="px-4 py-3 font-medium text-white">{t.name}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-orange-400">
+                        ${t.revenueMTD.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {t.revChange !== null ? (
+                          <span className={`text-xs font-bold ${isPositive ? "text-green-400" : isNegative ? "text-red-400" : "text-zinc-500"}`}>
+                            {isPositive ? "↑" : isNegative ? "↓" : "→"}
+                            ${Math.abs(t.revChange).toLocaleString()}
+                            {t.revChangePct !== null && ` (${t.revChangePct > 0 ? "+" : ""}${t.revChangePct}%)`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-600">No prev data</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-300">{t.jobCount}</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-300">{t.hoursWorked}</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-400">
+                        {t.revPerHr ? `$${t.revPerHr}` : "—"}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono ${t.recalls > 1 ? "text-red-400 font-bold" : t.recalls > 0 ? "text-amber-400" : "text-green-400"}`}>
+                        {t.recalls}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-green-400">
+                        {t.meetsThreshold ? `$${t.commission.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
+                            <div
+                              className={`h-full rounded-full ${t.meetsThreshold ? "bg-green-500" : "bg-zinc-500"}`}
+                              style={{ width: `${t.progressPct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-zinc-600 whitespace-nowrap">
+                            {t.progressPct}%
+                          </span>
+                        </div>
+                        {!t.meetsThreshold && (
+                          <div className="text-[10px] text-zinc-600 mt-0.5">
+                            ${t.thresholdGap.toLocaleString()} to threshold
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : !loading && (
+          <div className="p-8 text-center text-zinc-600">No technician data returned</div>
+        )}
+      </DataPanel>
 
-      {/* Revenue per tech bar visual */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-        <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">Revenue Distribution — Top 10</div>
-        <div className="space-y-2">
-          {TECHNICIANS.slice(0, 10).map(t => {
-            const pct = (t.revenue / TECHNICIANS[0].revenue) * 100;
-            const isGreen  = t.efficiency >= 70;
-            const isAmber  = t.efficiency >= 50 && t.efficiency < 70;
-            return (
-              <div key={t.name} className="flex items-center gap-3">
-                <div className="w-36 text-xs text-zinc-300 truncate text-right flex-shrink-0">{t.name}</div>
-                <div className="flex-1 h-5 bg-zinc-800 rounded-sm overflow-hidden">
-                  <div
-                    className="h-full rounded-sm flex items-center pl-2 text-xs font-bold text-white transition-all"
-                    style={{
-                      width: `${pct}%`,
-                      background: isGreen ? "#22c55e" : isAmber ? "#f59e0b" : "#ef4444"
-                    }}
-                  >
-                    {pct > 20 && `$${(t.revenue/1000).toFixed(0)}k`}
-                  </div>
-                </div>
-                <div className="w-20 text-xs text-right flex-shrink-0">
-                  <span className={t.efficiency >= 70 ? "text-green-400" : t.efficiency >= 50 ? "text-amber-400" : "text-red-400"}>
-                    {t.efficiency}% eff
-                  </span>
-                </div>
-                {t.recalls >= 3 && (
-                  <div className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full flex-shrink-0">
-                    {t.recalls} recalls
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3 text-xs text-zinc-700 flex gap-4">
-          <span>🟢 ≥70% efficiency</span>
-          <span>🟡 50–69%</span>
-          <span>🔴 &lt;50%</span>
-        </div>
-      </div>
-
-      {/* Full scorecard table */}
-      <TechScorecard />
-
-    </div>
-  );
-}
-
-function TechKpi({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  const c = color === "green" ? "text-green-400" : color === "red" ? "text-red-400" : color === "amber" ? "text-amber-400" : "text-white";
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-      <div className="text-xs text-zinc-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className={`text-2xl font-black ${c}`}>{value}</div>
-      <div className="text-xs text-zinc-600 mt-0.5">{sub}</div>
     </div>
   );
 }

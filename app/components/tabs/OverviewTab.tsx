@@ -1,91 +1,166 @@
 "use client";
 
-import RevenueGauge from "@/app/components/RevenueGauge";
+import { useSearchParams } from "next/navigation";
+import { useApi } from "@/app/lib/use-api";
+import DataPanel, { KpiCompare } from "@/app/components/DataPanel";
 import RevenueTrend from "@/app/components/RevenueTrend";
-import KpiCard      from "@/app/components/KpiCard";
 import RatesRow     from "@/app/components/RatesRow";
-import CsrScorecard from "@/app/components/CsrScorecard";
-import { METRICS, ACTIONS }  from "@/app/data/staticData";
 
-const criticalActions = ACTIONS.filter(a => a.priority === "critical" && a.status !== "done");
+// Verified static numbers from Phillip's ST screenshot — March 2026
+const ST_VERIFIED = {
+  totalRevenue: 530900,
+  missedRevenue: 174510,
+  totalSales: 665582,
+  closedAvgSale: 2427,
+  completedRevenue: 529809,
+  callBookingRate: 68,
+  totalConversionRate: 54,
+  customerSatisfaction: 4.7,
+  totalCancellations: 94,
+  memberships: 115,
+  verifiedDate: "2026-03-25",
+};
 
-export default function OverviewTab() {
+interface RevenueData {
+  ok: boolean;
+  period: string;
+  current: { total: number; count: number };
+  previous: { total: number };
+  change: number;
+  changePct: number;
+  updatedAt: string;
+  source: string;
+  error?: string;
+}
+
+export default function OverviewTab({ refreshKey }: { refreshKey?: number }) {
+  const params = useSearchParams();
+  const date  = params.get("date") || "mtd";
+  const trade = params.get("trade") || "all";
+  const staff = params.get("staff") || "All Staff";
+
+  const { data: revData, loading: revLoading, error: revError, updatedAt: revUpdated } =
+    useApi<RevenueData>("/api/revenue", { date, trade, staff }, refreshKey);
+
+  const prevLabel = revData?.previous?.total
+    ? `$${(revData.previous.total / 1000).toFixed(0)}k prev`
+    : null;
+
   return (
     <div className="p-4 lg:p-6 space-y-5">
 
-      {/* Critical alert banner */}
-      {criticalActions.length > 0 && (
-        <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4">
-          <div className="text-xs font-bold uppercase tracking-widest text-red-400 mb-2">
-            ⚠ {criticalActions.length} Critical Actions Required
+      {/* ST Verified KPIs — Phillip's screenshot data */}
+      <DataPanel
+        title="Overview — Verified from ServiceTitan"
+        source="ServiceTitan"
+        updatedAt={`${ST_VERIFIED.verifiedDate}T00:00:00.000Z`}
+        loading={false}
+      >
+        <div className="p-5 space-y-4">
+          <div className="text-xs text-zinc-600 mb-2">
+            ✅ Verified: {ST_VERIFIED.verifiedDate} from ST screenshot — these figures are confirmed by Phillip
           </div>
-          <div className="space-y-1">
-            {criticalActions.map(a => (
-              <div key={a.id} className="text-sm text-red-300">
-                • {a.title}
-              </div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <KpiCompare
+              label="Total Revenue"
+              value={`$${(ST_VERIFIED.totalRevenue/1000).toFixed(1)}k`}
+              icon="💰"
+              accent
+            />
+            <KpiCompare
+              label="Missed Revenue"
+              value={`$${(ST_VERIFIED.missedRevenue/1000).toFixed(1)}k`}
+              icon="❌"
+            />
+            <KpiCompare
+              label="Total Sales"
+              value={`$${(ST_VERIFIED.totalSales/1000).toFixed(0)}k`}
+              icon="🎯"
+            />
+            <KpiCompare
+              label="Closed Avg Sale"
+              value={`$${ST_VERIFIED.closedAvgSale.toLocaleString()}`}
+              icon="📊"
+            />
+            <KpiCompare
+              label="Completed Rev"
+              value={`$${(ST_VERIFIED.completedRevenue/1000).toFixed(0)}k`}
+              icon="✅"
+            />
+            <KpiCompare
+              label="Memberships"
+              value={`${ST_VERIFIED.memberships}`}
+              icon="⭐"
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCompare
+              label="Call Booking Rate"
+              value={`${ST_VERIFIED.callBookingRate}%`}
+              icon="📞"
+            />
+            <KpiCompare
+              label="Conversion Rate"
+              value={`${ST_VERIFIED.totalConversionRate}%`}
+              icon="🔄"
+            />
+            <KpiCompare
+              label="Customer Satisfaction"
+              value={`${ST_VERIFIED.customerSatisfaction} ★`}
+              icon="😊"
+            />
+            <KpiCompare
+              label="Cancellations"
+              value={`${ST_VERIFIED.totalCancellations}`}
+              icon="🚫"
+            />
           </div>
         </div>
-      )}
+      </DataPanel>
 
-      {/* Revenue section */}
-      <section>
-        <SectionHeader>Revenue · Month to Date</SectionHeader>
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="lg:w-64 flex-shrink-0">
-            <RevenueGauge completed={METRICS.completedRevenue} target={METRICS.revenueTarget} />
+      {/* Live Revenue from API */}
+      <DataPanel
+        title={`Live Revenue · ${revData?.period || date.toUpperCase()}`}
+        source="ServiceTitan (live)"
+        updatedAt={revUpdated}
+        loading={revLoading}
+        error={revError}
+      >
+        <div className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            <KpiCompare
+              label="Revenue This Period"
+              value={revData?.current?.total ? `$${(revData.current.total/1000).toFixed(1)}k` : "—"}
+              prevValue={prevLabel}
+              change={revData?.change}
+              changePct={revData?.changePct}
+              icon="💰"
+              accent
+              loading={revLoading}
+            />
+            <KpiCompare
+              label="Invoices"
+              value={revData?.current?.count ? String(revData.current.count) : "—"}
+              icon="🧾"
+              loading={revLoading}
+            />
+            <KpiCompare
+              label="Prev Period"
+              value={revData?.previous?.total ? `$${(revData.previous.total/1000).toFixed(1)}k` : "—"}
+              icon="📅"
+              loading={revLoading}
+            />
           </div>
           <RevenueTrend />
         </div>
-      </section>
+      </DataPanel>
 
-      {/* Company KPIs */}
-      <section>
-        <SectionHeader>Company Metrics</SectionHeader>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Total Sales"         value={`$${(METRICS.totalSales/1000).toFixed(0)}k`}         sub="$581,020"     accent icon="💰" />
-          <KpiCard label="Closed Avg Sale"     value={`$${METRICS.closedAvgSale.toLocaleString()}`}        sub="Per closed job"       icon="🎯" />
-          <KpiCard label="Completed Revenue"   value={`$${(METRICS.completedRevenue/1000).toFixed(0)}k`}   sub="$510,216"     accent icon="✅" />
-          <KpiCard label="Opp Job Avg"         value={`$${METRICS.opportunityJobAvg.toLocaleString()}`}    sub="Per opportunity"      icon="📊" />
-          <KpiCard label="Call Booking Rate"   value={`${METRICS.callBookingRate}%`}                       sub="Target 75%+"          icon="📞" />
-          <KpiCard label="Total Conversion"    value={`${METRICS.totalConversionRate}%`}                   sub="Opps → closed"        icon="🔄" />
+      {/* Performance Rates */}
+      <DataPanel title="Performance Rates" source="ServiceTitan" updatedAt={null}>
+        <div className="p-4">
+          <RatesRow />
         </div>
-      </section>
-
-      {/* EBITDA alert */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-4">
-        <div className="text-3xl">📉</div>
-        <div>
-          <div className="font-bold text-amber-400">EBITDA: {METRICS.ebitdaActualPct}% vs {METRICS.ebitdaTargetPct}% target</div>
-          <div className="text-sm text-zinc-400 mt-0.5">
-            Gap of {METRICS.ebitdaTargetPct - METRICS.ebitdaActualPct}% · {METRICS.marginBelowFloorPct}% of jobs are below 15% margin · Pricebook urgently needs review
-          </div>
-        </div>
-        <div className="ml-auto text-right hidden sm:block">
-          <div className="text-2xl font-black text-amber-400">
-            ${((METRICS.ebitdaTargetPct - METRICS.ebitdaActualPct) / 100 * METRICS.completedRevenue / 1000).toFixed(0)}k
-          </div>
-          <div className="text-xs text-zinc-500">Monthly EBITDA gap</div>
-        </div>
-      </div>
-
-      {/* Rates */}
-      <section>
-        <SectionHeader>Performance Rates</SectionHeader>
-        <RatesRow />
-      </section>
-
-      {/* CSR */}
-      <section>
-        <SectionHeader>CSR Scorecards</SectionHeader>
-        <CsrScorecard />
-      </section>
-
+      </DataPanel>
     </div>
   );
-}
-
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return <div className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-3">{children}</div>;
 }

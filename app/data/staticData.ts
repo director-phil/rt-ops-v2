@@ -4,20 +4,23 @@
 // NEVER invent data. If a field is unknown, mark as null.
 // ============================================================
 
+// Verified from Phillip's ServiceTitan screenshot — 2026-03-25
 export const METRICS = {
   revenueTarget: 600000,
-  completedRevenue: 510216,
-  totalSales: 581020,
-  closedAvgSale: 2434,
+  completedRevenue: 529809,   // [Verified: 2026-03-25]
+  totalSales: 665582,          // [Verified: 2026-03-25]
+  closedAvgSale: 2427,         // [Verified: 2026-03-25]
   opportunityJobAvg: 1010,
-  callBookingRate: 68,
-  totalConversionRate: 54,
-  customerSatisfaction: 4.7,
-  totalCancellations: 93,
-  membershipsConverted: 112,
+  callBookingRate: 68,          // [Verified: 2026-03-25]
+  totalConversionRate: 54,      // [Verified: 2026-03-25]
+  customerSatisfaction: 4.7,    // [Verified: 2026-03-25]
+  totalCancellations: 94,       // [Verified: 2026-03-25]
+  membershipsConverted: 115,    // [Verified: 2026-03-25]
   ebitdaActualPct: 10.8,
   ebitdaTargetPct: 30,
-  marginBelowFloorPct: 68, // 68% of jobs below 15% margin
+  marginBelowFloorPct: 68,
+  missedRevenue: 174510,        // [Verified: 2026-03-25]
+  totalRevenue: 530900,         // [Verified: 2026-03-25]
 };
 
 export const TECHNICIANS = [
