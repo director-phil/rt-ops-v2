@@ -15,6 +15,7 @@ interface Action {
   status: ActionStatus;
   impact?: string;
   dueDate?: string;
+  tab?: string;
 }
 
 const ACTIONS: Action[] = [
@@ -115,7 +116,7 @@ export default function ActionsTab() {
           const p = PRIORITY_CONFIG[action.priority];
           const s = STATUS_CONFIG[action.status];
           const isDone = action.status === "done";
-          const isOverdue = new Date(action.dueDate) < new Date() && !isDone;
+          const isOverdue = action.dueDate ? new Date(action.dueDate) < new Date() && !isDone : false;
 
           return (
             <div
