@@ -18,21 +18,28 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   const mcpUrl = process.env.ZAPIER_MCP_URL;
   if (!mcpUrl) throw new Error("ZAPIER_MCP_URL not configured");
 
-  const body: ZapierMCPRequest = {
+  // Zapier streamable HTTP MCP: requires jsonrpc 2.0, headers as string, instructions required
+  const args = { ...toolArgs };
+  if (!args.instructions) args.instructions = `Call ${toolName}`;
+  // Convert headers object → newline-delimited string if needed
+  if (args.headers && typeof args.headers === "object") {
+    args.headers = Object.entries(args.headers as Record<string, string>)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n");
+  }
+
+  const body = {
     jsonrpc: "2.0",
     id: 1,
     method: "tools/call",
-    params: {
-      name: toolName,
-      arguments: toolArgs,
-    },
+    params: { name: toolName, arguments: args },
   };
 
   const res = await fetch(mcpUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
+      Accept: "application/json",
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -42,28 +49,24 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   if (!res.ok) {
     throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
   }
-  
-  // Zapier MCP returns SSE or JSON - parse whichever
-  let parsed: unknown;
-  if (rawText.startsWith("data:")) {
-    // SSE format: extract last data line
+
+  // Zapier returns SSE (event: message / data: {...}) — extract last data line
+  let jsonStr = rawText;
+  if (rawText.includes("\ndata:") || rawText.startsWith("event:") || rawText.startsWith("data:")) {
     const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
-    const lastLine = lines[lines.length - 1]?.replace(/^data:\s*/, "") || "{}";
-    parsed = JSON.parse(lastLine);
-  } else {
-    parsed = JSON.parse(rawText);
+    jsonStr = lines[lines.length - 1]?.replace(/^data:\s*/, "") || "{}";
   }
-  return parsed;
+  return JSON.parse(jsonStr);
 }
 
 export async function GET(_req: NextRequest) {
   try {
     const result = await callZapierMCP("xero_api_request_beta", {
-      url: "https://api.xero.com/api.xro/2.0/BankAccounts",
+      url: "https://api.xero.com/api.xro/2.0/Accounts?Type=BANK",
       method: "GET",
       headers: {
         "Xero-tenant-id": XERO_TENANT_ID,
-        Accept: "application/json, text/event-stream",
+        Accept: "application/json",
       },
     });
 
