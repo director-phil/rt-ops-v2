@@ -2,7 +2,8 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import type { ValueType } from "recharts/types/component/DefaultTooltipContent";
-import { REVENUE_TREND } from "@/app/data/staticData";
+import { CASHFLOW_DATA } from "@/app/data/staticData";
+const REVENUE_TREND = CASHFLOW_DATA.filter(d => d.type === "actual");
 
 const fmt = (v: number) => `$${(v / 1000).toFixed(0)}k`;
 
