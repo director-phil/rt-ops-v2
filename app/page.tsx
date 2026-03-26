@@ -11,6 +11,7 @@ import CashflowTab    from "@/app/components/tabs/CashflowTab";
 import TechTab        from "@/app/components/tabs/TechTab";
 import GoogleAdsTab   from "@/app/components/tabs/GoogleAdsTab";
 import LeadsTab       from "@/app/components/tabs/LeadsTab";
+import PodiumTab      from "@/app/components/tabs/PodiumTab";
 import JobsProfitTab  from "@/app/components/tabs/JobsProfitTab";
 import CapacityTab    from "@/app/components/tabs/CapacityTab";
 import CommissionsTab from "@/app/components/tabs/CommissionsTab";
@@ -19,7 +20,7 @@ import { ACTIONS }    from "@/app/data/staticData";
 
 const ACTIONS_COUNT = ACTIONS.filter(a => a.status !== "done").length;
 
-export type TabId = "overview" | "finance" | "cashflow" | "tech" | "ads" | "leads" | "jobs" | "capacity" | "commissions" | "actions";
+export type TabId = "overview" | "finance" | "cashflow" | "tech" | "ads" | "leads" | "podium" | "jobs" | "capacity" | "commissions" | "actions";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview",     label: "Overview",        icon: "⚡" },
@@ -28,6 +29,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "tech",         label: "Tech Performance", icon: "🔧" },
   { id: "ads",          label: "Google Ads",       icon: "📣" },
   { id: "leads",        label: "Leads",            icon: "📞" },
+  { id: "podium",       label: "Podium",           icon: "📱" },
   { id: "jobs",         label: "Jobs (Profit)",    icon: "🧾" },
   { id: "capacity",     label: "Capacity",         icon: "📅" },
   { id: "commissions",  label: "Commissions",      icon: "💵" },
@@ -37,7 +39,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 function sidebarSection(tab: TabId): "overview" | "techs" | "finance" | "leads" {
   if (tab === "tech" || tab === "capacity" || tab === "commissions") return "techs";
   if (tab === "finance" || tab === "cashflow" || tab === "jobs")    return "finance";
-  if (tab === "leads" || tab === "ads")                             return "leads";
+  if (tab === "leads" || tab === "ads" || tab === "podium")         return "leads";
   return "overview";
 }
 
@@ -49,14 +51,34 @@ function DataFreshnessDot({ syncTime }: { syncTime: Date | null }) {
   return <span className="w-2 h-2 rounded-full bg-red-400 inline-block" title="Stale" />;
 }
 
+function LoadingOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
+      <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-2xl px-6 py-4 shadow-2xl">
+        <svg className="animate-spin h-5 w-5 text-orange-500" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span className="text-white font-semibold text-sm">Applying filter…</span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardInner() {
   const router    = useRouter();
   const pathname  = usePathname();
   const params    = useSearchParams();
   const activeTab = (params.get("tab") || "overview") as TabId;
   const [refreshing, setRefreshing] = useState(false);
+  const [filterLoading, setFilterLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+
+  // Current filter values — passed to all tabs
+  const date  = params.get("date")  || "mtd";
+  const trade = params.get("trade") || "all";
+  const staff = params.get("staff") || "All Staff";
 
   const setTab = (id: TabId) => {
     const p = new URLSearchParams(params.toString());
@@ -72,8 +94,20 @@ function DashboardInner() {
     setRefreshing(false);
   }, []);
 
+  // When filter changes, show spinner briefly then increment refreshKey
+  const handleFilterChange = useCallback(() => {
+    setFilterLoading(true);
+    setRefreshKey(k => k + 1);
+    setTimeout(() => {
+      setLastSync(new Date());
+      setFilterLoading(false);
+    }, 800);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#0a0a0a" }}>
+      {filterLoading && <LoadingOverlay />}
+
       {/* ── Brand bar ── */}
       <div className="flex items-center px-4 py-2 gap-3 flex-shrink-0" style={{ background: "#FF4500" }}>
         <span className="text-white font-black text-sm tracking-tight">⚡ RT OPS</span>
@@ -87,7 +121,7 @@ function DashboardInner() {
       </div>
 
       {/* ── Filter bar ── */}
-      <FilterBar onRefresh={handleRefresh} refreshing={refreshing} />
+      <FilterBar onRefresh={handleRefresh} refreshing={refreshing} onFilterChange={handleFilterChange} />
 
       {/* ── Tab bar ── */}
       <div className="flex items-center gap-0.5 px-2 border-b border-zinc-800 overflow-x-auto flex-shrink-0 scrollbar-hide"
@@ -124,6 +158,7 @@ function DashboardInner() {
           {activeTab === "tech"        && <TechTab        refreshKey={refreshKey} />}
           {activeTab === "ads"         && <GoogleAdsTab   refreshKey={refreshKey} />}
           {activeTab === "leads"       && <LeadsTab       refreshKey={refreshKey} />}
+          {activeTab === "podium"      && <PodiumTab />}
           {activeTab === "jobs"        && <JobsProfitTab  refreshKey={refreshKey} />}
           {activeTab === "capacity"    && <CapacityTab    refreshKey={refreshKey} />}
           {activeTab === "commissions" && <CommissionsTab refreshKey={refreshKey} />}

@@ -45,12 +45,17 @@ export function getDateRange(dateParam?: string | null): DateRange {
     default: {
       from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
       to = now;
-      // Previous month same day range
+      // Previous period = same elapsed days in previous month
+      // e.g. today is March 25 → compare Feb 1–25 (not full Feb)
+      const currentDayOfMonth = now.getDate(); // e.g. 25
       const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
-      const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 23, 59, 59);
-      const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+      // Last day of previous month
+      const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      // Use same day number, but cap at last day of prev month (e.g. day 31 → Feb 28)
+      const prevDayOfMonth = Math.min(currentDayOfMonth, prevMonthLastDay);
+      const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, prevDayOfMonth, 23, 59, 59);
       prevFrom = prevMonthStart;
-      prevTo = prevMonthSameDay < prevMonthEnd ? prevMonthSameDay : prevMonthEnd;
+      prevTo = prevMonthSameDay;
       label = now.toLocaleString("en-AU", { month: "long", year: "numeric" });
       break;
     }

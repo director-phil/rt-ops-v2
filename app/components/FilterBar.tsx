@@ -24,9 +24,10 @@ const TRADE_OPTIONS = [
 interface FilterBarProps {
   onRefresh?: () => void;
   refreshing?: boolean;
+  onFilterChange?: () => void;
 }
 
-export default function FilterBar({ onRefresh, refreshing }: FilterBarProps) {
+export default function FilterBar({ onRefresh, refreshing, onFilterChange }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -39,7 +40,9 @@ export default function FilterBar({ onRefresh, refreshing }: FilterBarProps) {
     const p = new URLSearchParams(params.toString());
     p.set(key, value);
     router.push(`${pathname}?${p.toString()}`);
-  }, [params, pathname, router]);
+    // Notify parent to show loading spinner and re-fetch
+    onFilterChange?.();
+  }, [params, pathname, router, onFilterChange]);
 
   return (
     <div className="sticky top-0 z-50 flex items-center gap-2 px-4 py-2.5 border-b border-zinc-800 flex-wrap"

@@ -37,12 +37,65 @@ interface ReconcileResponse {
   error?: string;
 }
 
+interface BankAccount {
+  id: string;
+  name: string;
+  code: string;
+  balance: number;
+  currency: string;
+  type: string;
+}
+
+interface BankResponse {
+  ok: boolean;
+  bankAccounts: BankAccount[];
+  totalBalance: number;
+  updatedAt: string;
+  source: string;
+  error?: string;
+}
+
+interface Expense {
+  invoiceId: string;
+  invoiceNumber: string;
+  supplier: string;
+  amountDue: number;
+  dueDate: string | null;
+  daysUntilDue: number | null;
+  currency: string;
+  status: string;
+}
+
+interface ExpensesResponse {
+  ok: boolean;
+  expenses: Expense[];
+  totalOwed: number;
+  count: number;
+  updatedAt: string;
+  source: string;
+  error?: string;
+}
+
+function dueBadge(days: number | null) {
+  if (days === null) return <span className="text-zinc-600">—</span>;
+  if (days < 0) return <span className="text-xs font-bold text-red-400">{Math.abs(days)}d overdue</span>;
+  if (days === 0) return <span className="text-xs font-bold text-amber-400">Due today</span>;
+  if (days <= 7) return <span className="text-xs font-bold text-amber-400">In {days}d</span>;
+  return <span className="text-xs text-zinc-400">In {days}d</span>;
+}
+
 export default function FinanceTab({ refreshKey }: { refreshKey?: number }) {
   const params = useSearchParams();
   const date = params.get("date") || "mtd";
 
   const { data, loading, error, updatedAt } =
     useApi<ReconcileResponse>("/api/xero-reconcile", { date }, refreshKey);
+
+  const { data: bankData, loading: bankLoading, error: bankError, updatedAt: bankUpdated } =
+    useApi<BankResponse>("/api/bank", {}, refreshKey);
+
+  const { data: expData, loading: expLoading, error: expError, updatedAt: expUpdated } =
+    useApi<ExpensesResponse>("/api/expenses", {}, refreshKey);
 
   const arData = data?.arAging ? [
     { bracket: "0–30 days",  amount: data.arAging["0-30"].amount,  count: data.arAging["0-30"].count,  color: "#22c55e" },
@@ -55,6 +108,101 @@ export default function FinanceTab({ refreshKey }: { refreshKey?: number }) {
 
   return (
     <div className="p-4 lg:p-6 space-y-5">
+
+      {/* Bank Balances */}
+      <DataPanel
+        title="Bank Balances"
+        source="Xero"
+        updatedAt={bankUpdated}
+        loading={bankLoading}
+        error={bankError}
+      >
+        {bankData && (
+          <div className="p-5">
+            {bankData.bankAccounts.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                  {bankData.bankAccounts.map(acc => (
+                    <div key={String(acc.id)} className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700">
+                      <div className="text-xs text-zinc-500 mb-1 truncate">{acc.name}</div>
+                      <div className={`text-2xl font-black ${acc.balance >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {acc.balance < 0 ? "-" : ""}${Math.abs(acc.balance).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-xs text-zinc-600 mt-0.5">{acc.currency} · {acc.type}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-right text-sm">
+                  <span className="text-zinc-500">Total: </span>
+                  <span className={`font-black text-lg ${bankData.totalBalance >= 0 ? "text-white" : "text-red-400"}`}>
+                    ${bankData.totalBalance.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AUD
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="py-8 text-center text-zinc-600">No bank accounts returned from Xero</div>
+            )}
+          </div>
+        )}
+      </DataPanel>
+
+      {/* Expenses by Supplier */}
+      <DataPanel
+        title="Unpaid Bills — Expenses by Supplier"
+        source="Xero"
+        updatedAt={expUpdated}
+        loading={expLoading}
+        error={expError}
+        badge={expData && (
+          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
+            {expData.count} bills · ${expData.totalOwed.toLocaleString()} owed
+          </span>
+        )}
+      >
+        {expData && (
+          expData.expenses.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-800/30">
+                    <th className="text-left px-4 py-3 text-xs font-bold uppercase text-zinc-500">Supplier</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Amount Due</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Due Date</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold uppercase text-zinc-500">Days Until Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expData.expenses.map((exp, i) => (
+                    <tr key={String(exp.invoiceId || i)} className={`border-b border-zinc-800/50 hover:bg-zinc-800/20 ${(exp.daysUntilDue !== null && exp.daysUntilDue < 0) ? "bg-red-500/5" : ""}`}>
+                      <td className="px-4 py-3 font-medium text-white">{exp.supplier}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-orange-400">
+                        ${exp.amountDue.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-400">
+                        {exp.dueDate || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {dueBadge(exp.daysUntilDue)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-zinc-700 bg-zinc-800/30">
+                    <td className="px-4 py-3 font-bold text-white">Total</td>
+                    <td className="px-4 py-3 text-right font-mono font-black text-orange-400">
+                      ${expData.totalOwed.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-zinc-600">No unpaid bills</div>
+          )
+        )}
+      </DataPanel>
 
       {/* ST vs Xero Reconciliation */}
       <DataPanel

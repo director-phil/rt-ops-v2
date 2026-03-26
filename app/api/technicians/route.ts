@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stFetchAll } from "@/app/lib/st-fetch-all";
+import { getSTToken } from "@/app/lib/st-auth";
 import { getDateRange } from "@/app/lib/date-range";
 
 export const dynamic = "force-dynamic";
@@ -8,15 +9,82 @@ const COMMISSION_THRESHOLD = 80000;
 const NET_SALE_FACTOR = 0.95;
 const COMMISSION_RATE = 0.015;
 
+// Whitelist of real field technicians — sourced from Phillip 2026-03-25
+const TECH_WHITELIST = [
+  "Mitch Powell",
+  "Romello Moore",
+  "Curtis Jeffrey",
+  "Kyle Rootes",
+  "Zachary Lingard",
+  "Dean Retra",
+  "Hayden Sibley",
+  "Scott Gullick",
+  "Lachlan Henzell",
+  "Rusty Daniells",
+  "Bradley Tinworth MT",
+  "Kristian Calcagno",
+  "Alex Naughton",
+  "David White",
+  "Bailey Somerville",
+  "Daniel Hayes",
+  "Alex Peisler",
+];
+
 const parseNum = (v: unknown): number => {
   const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
   return isNaN(n) ? 0 : n;
 };
 
+function isTech(name: string): boolean {
+  // Never show email addresses or login accounts
+  if (!name || name.includes("@")) return false;
+  // Use whitelist match (case-insensitive)
+  for (const w of TECH_WHITELIST) {
+    if (w.toLowerCase() === name.toLowerCase()) return true;
+  }
+  return false;
+}
+
+async function fetchEmployeeTechIds(): Promise<Set<string>> {
+  const tenantId = process.env.ST_TENANT_ID!;
+  const appKey = process.env.ST_APP_KEY!;
+  const techIds = new Set<string>();
+
+  try {
+    const token = await getSTToken();
+    // Try HR API first for role-filtered employees
+    const url = `https://api.servicetitan.io/hr/v2/tenant/${tenantId}/employees?active=true&pageSize=200`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, "ST-App-Key": appKey },
+      cache: "no-store",
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const employees = data.data || [];
+      for (const emp of employees) {
+        const name = (emp.name as string) || "";
+        const roles = (emp.roles as string[]) || [];
+        const roleStr = roles.join(",").toLowerCase();
+        // Include if in whitelist OR has Technician role and not email
+        if (
+          isTech(name) ||
+          (roleStr.includes("technician") && !name.includes("@"))
+        ) {
+          techIds.add(String(emp.id));
+        }
+      }
+    }
+  } catch {
+    // Fall through — we'll rely on whitelist filtering of invoice data
+  }
+
+  return techIds;
+}
+
 async function fetchTechMetrics(from: string, to: string) {
   const tenantId = process.env.ST_TENANT_ID!;
 
-  // Use invoices to get tech data via employeeInfo field
   const invoices = await stFetchAll(`/accounting/v2/tenant/${tenantId}/invoices`, {
     createdOnOrAfter: from,
     createdBefore: to,
@@ -35,11 +103,8 @@ async function fetchTechMetrics(from: string, to: string) {
   for (const inv of invoices) {
     const revenue = parseNum(inv.total);
 
-    // employeeInfo is the tech who performed the work
     const empInfo = inv.employeeInfo as Record<string, unknown> | null;
-    // assignedTo may also have tech info
     const assignedTo = inv.assignedTo as Record<string, unknown> | null;
-    // createdBy as fallback
     const createdBy = inv.createdBy as Record<string, unknown> | null;
 
     const techInfo = empInfo || assignedTo || createdBy;
@@ -48,6 +113,9 @@ async function fetchTechMetrics(from: string, to: string) {
     const id = String(techInfo.id);
     const name = (techInfo.name as string) || "Unknown";
 
+    // Filter: must be a real tech (not email/login account)
+    if (!isTech(name)) continue;
+
     if (!techMap[id]) {
       techMap[id] = { id, name, revenue: 0, invoices: 0, recalls: 0 };
     }
@@ -55,6 +123,8 @@ async function fetchTechMetrics(from: string, to: string) {
     techMap[id].invoices++;
   }
 
+  // Also try to get any whitelisted techs from jobs endpoint (they may not appear in invoices)
+  // but return what we have from invoices for now
   return Object.values(techMap);
 }
 
@@ -89,7 +159,7 @@ export async function GET(req: NextRequest) {
         revChange: revChange !== null ? Math.round(revChange) : null,
         revChangePct: revChangePct !== null ? Math.round(revChangePct * 10) / 10 : null,
         jobCount: tech.invoices,
-        hoursWorked: 0, // not available from invoices
+        hoursWorked: 0,
         revPerHr: null,
         recalls: tech.recalls,
         commission: Math.round(commission * 100) / 100,
