@@ -14,6 +14,7 @@ interface Action {
   owner: string;
   status: ActionStatus;
   impact?: string;
+  dueDate?: string;
 }
 
 const ACTIONS: Action[] = [
