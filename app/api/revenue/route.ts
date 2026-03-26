@@ -41,7 +41,13 @@ async function fetchRevenue(from: string, to: string, tradeFilter: string | null
     });
   }
 
-  const total = filtered.reduce((s, inv) => s + ((inv.total as number) || 0), 0);
+  // ST returns totals as strings sometimes — always coerce to number
+  const parseNum = (v: unknown): number => {
+    const n = typeof v === "string" ? parseFloat(v) : Number(v);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const total = filtered.reduce((s, inv) => s + parseNum(inv.total), 0);
   const count = filtered.length;
 
   // By trade breakdown
@@ -50,7 +56,7 @@ async function fetchRevenue(from: string, to: string, tradeFilter: string | null
     const bu = ((inv.businessUnit as Record<string, unknown>)?.name as string) || "";
     const trade = normalizeTrade(bu);
     if (!byTrade[trade]) byTrade[trade] = { revenue: 0, count: 0 };
-    byTrade[trade].revenue += (inv.total as number) || 0;
+    byTrade[trade].revenue += parseNum(inv.total);
     byTrade[trade].count++;
   }
 
