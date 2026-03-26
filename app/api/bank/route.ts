@@ -5,6 +5,8 @@ export const dynamic = "force-dynamic";
 const XERO_TENANT_ID = "854c7ae0-43b7-415d-85b3-728a9a3da702";
 
 interface ZapierMCPRequest {
+  jsonrpc: "2.0";
+  id: number;
   method: string;
   params: {
     name: string;
@@ -17,6 +19,8 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
   if (!mcpUrl) throw new Error("ZAPIER_MCP_URL not configured");
 
   const body: ZapierMCPRequest = {
+    jsonrpc: "2.0",
+    id: 1,
     method: "tools/call",
     params: {
       name: toolName,
@@ -34,12 +38,22 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
     cache: "no-store",
   });
 
+  const rawText = await res.text();
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Zapier MCP error ${res.status}: ${txt.slice(0, 300)}`);
+    throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
   }
-
-  return res.json();
+  
+  // Zapier MCP returns SSE or JSON - parse whichever
+  let parsed: unknown;
+  if (rawText.startsWith("data:")) {
+    // SSE format: extract last data line
+    const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
+    const lastLine = lines[lines.length - 1]?.replace(/^data:\s*/, "") || "{}";
+    parsed = JSON.parse(lastLine);
+  } else {
+    parsed = JSON.parse(rawText);
+  }
+  return parsed;
 }
 
 export async function GET(_req: NextRequest) {

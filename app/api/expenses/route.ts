@@ -18,12 +18,22 @@ async function callZapierMCP(toolName: string, toolArgs: Record<string, unknown>
     cache: "no-store",
   });
 
+  const rawText = await res.text();
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Zapier MCP error ${res.status}: ${txt.slice(0, 300)}`);
+    throw new Error(`Zapier MCP error ${res.status}: ${rawText.slice(0, 300)}`);
   }
-
-  return res.json();
+  
+  // Zapier MCP returns SSE or JSON - parse whichever
+  let parsed: unknown;
+  if (rawText.startsWith("data:")) {
+    // SSE format: extract last data line
+    const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
+    const lastLine = lines[lines.length - 1]?.replace(/^data:\s*/, "") || "{}";
+    parsed = JSON.parse(lastLine);
+  } else {
+    parsed = JSON.parse(rawText);
+  }
+  return parsed;
 }
 
 export async function GET(_req: NextRequest) {
