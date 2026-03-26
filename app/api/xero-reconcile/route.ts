@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
       pageSize: "500",
     }) as Record<string, unknown>[];
 
-    const stTotal = stInvoices.reduce((s, inv) => s + ((inv.total as number) || 0), 0);
+    const parseNum = (v: unknown): number => { const n = typeof v === "string" ? parseFloat(v as string) : Number(v); return isNaN(n) ? 0 : n; };
+    const stTotal = stInvoices.reduce((s, inv) => s + parseNum(inv.total), 0);
     const stCount = stInvoices.length;
 
     // Fetch Xero data if credentials available

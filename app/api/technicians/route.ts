@@ -16,10 +16,11 @@ const parseNum = (v: unknown): number => {
 async function fetchTechMetrics(from: string, to: string) {
   const tenantId = process.env.ST_TENANT_ID!;
 
-  const jobs = await stFetchAll(`/jpm/v2/tenant/${tenantId}/jobs`, {
+  // Use invoices to get tech data via employeeInfo field
+  const invoices = await stFetchAll(`/accounting/v2/tenant/${tenantId}/invoices`, {
     createdOnOrAfter: from,
     createdBefore: to,
-    jobStatus: "Completed",
+    active: "True",
     pageSize: "500",
   }) as Record<string, unknown>[];
 
@@ -27,58 +28,31 @@ async function fetchTechMetrics(from: string, to: string) {
     id: number | string;
     name: string;
     revenue: number;
-    jobs: number;
-    hours: number;
+    invoices: number;
     recalls: number;
   }> = {};
 
-  for (const job of jobs) {
-    const jobRevenue = parseNum(job.total);
+  for (const inv of invoices) {
+    const revenue = parseNum(inv.total);
 
-    // ST v2 jobs can have assignedTechnicians (array) or assignments
-    const assignedTechs = (job.assignedTechnicians as Record<string, unknown>[])
-      || (job.assignments as Record<string, unknown>[])
-      || [];
+    // employeeInfo is the tech who performed the work
+    const empInfo = inv.employeeInfo as Record<string, unknown> | null;
+    // assignedTo may also have tech info
+    const assignedTo = inv.assignedTo as Record<string, unknown> | null;
+    // createdBy as fallback
+    const createdBy = inv.createdBy as Record<string, unknown> | null;
 
-    // Also check direct tech fields
-    const directTechId = job.technicianId || (job.technician as Record<string, unknown>)?.id;
-    const directTechName = (job.technician as Record<string, unknown>)?.name as string
-      || (job.assignedTo as Record<string, unknown>)?.name as string;
+    const techInfo = empInfo || assignedTo || createdBy;
+    if (!techInfo?.id) continue;
 
-    let processed = false;
+    const id = String(techInfo.id);
+    const name = (techInfo.name as string) || "Unknown";
 
-    if (assignedTechs.length > 0) {
-      for (const a of assignedTechs) {
-        // Try multiple field name patterns
-        const techObj = (a.technician as Record<string, unknown>) || a;
-        const id = String(techObj.id || a.id || a.technicianId || "unknown");
-        const name = (techObj.name as string) || (a.name as string) || (a.technicianName as string) || "Unknown";
-
-        if (id === "unknown" || id === "undefined") continue;
-
-        if (!techMap[id]) {
-          techMap[id] = { id, name, revenue: 0, jobs: 0, hours: 0, recalls: 0 };
-        }
-        techMap[id].revenue += jobRevenue;
-        techMap[id].jobs++;
-        techMap[id].hours += parseNum(job.duration);
-        if (((job.jobTypeName as string) || "").toLowerCase().includes("recall")) {
-          techMap[id].recalls++;
-        }
-        processed = true;
-      }
+    if (!techMap[id]) {
+      techMap[id] = { id, name, revenue: 0, invoices: 0, recalls: 0 };
     }
-
-    if (!processed && directTechId) {
-      const id = String(directTechId);
-      const name = directTechName || "Unknown";
-      if (!techMap[id]) {
-        techMap[id] = { id, name, revenue: 0, jobs: 0, hours: 0, recalls: 0 };
-      }
-      techMap[id].revenue += jobRevenue;
-      techMap[id].jobs++;
-      techMap[id].hours += parseNum(job.duration);
-    }
+    techMap[id].revenue += revenue;
+    techMap[id].invoices++;
   }
 
   return Object.values(techMap);
@@ -106,7 +80,6 @@ export async function GET(req: NextRequest) {
       const meetsThreshold = tech.revenue >= COMMISSION_THRESHOLD;
       const commission = meetsThreshold ? netSale * COMMISSION_RATE : 0;
       const progressPct = Math.min(100, Math.round((tech.revenue / COMMISSION_THRESHOLD) * 100));
-      const revPerHr = tech.hours > 0 ? Math.round(tech.revenue / tech.hours) : null;
 
       return {
         id: tech.id,
@@ -115,9 +88,9 @@ export async function GET(req: NextRequest) {
         prevRevenue: prev ? Math.round(prev.revenue) : null,
         revChange: revChange !== null ? Math.round(revChange) : null,
         revChangePct: revChangePct !== null ? Math.round(revChangePct * 10) / 10 : null,
-        jobCount: tech.jobs,
-        hoursWorked: Math.round(tech.hours * 10) / 10,
-        revPerHr,
+        jobCount: tech.invoices,
+        hoursWorked: 0, // not available from invoices
+        revPerHr: null,
         recalls: tech.recalls,
         commission: Math.round(commission * 100) / 100,
         meetsThreshold,
@@ -126,30 +99,17 @@ export async function GET(req: NextRequest) {
       };
     }).sort((a, b) => b.revenueMTD - a.revenueMTD);
 
-    if (technicians.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        period: range.label,
-        commissionThreshold: COMMISSION_THRESHOLD,
-        technicians: [],
-        noData: true,
-        message: "No technician assignment data found in ServiceTitan for this period",
-        updatedAt: new Date().toISOString(),
-        source: "ServiceTitan",
-      });
-    }
-
     return NextResponse.json({
       ok: true,
       period: range.label,
       commissionThreshold: COMMISSION_THRESHOLD,
       technicians,
+      noData: technicians.length === 0,
       updatedAt: new Date().toISOString(),
       source: "ServiceTitan",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/technicians]", msg);
     return NextResponse.json({ ok: false, error: msg, updatedAt: new Date().toISOString() }, { status: 500 });
   }
 }
