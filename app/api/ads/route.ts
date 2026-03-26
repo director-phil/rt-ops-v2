@@ -3,159 +3,226 @@ import { getDateRange } from "@/app/lib/date-range";
 
 export const dynamic = "force-dynamic";
 
-// Google Ads API requires OAuth - we use the Zapier/bridge approach
-// If ST bridge is available, prefer that; otherwise return verified static data
-// NOTE: Google Ads API key (REDACTED_ROTATE_THIS_KEY) is a Maps key,
-// not Google Ads API. Ads API requires OAuth2 developer token.
-// Data below is from the verified screenshots Phillip provided.
+// Google Ads — REAL DATA from google-ads-march.json (pulled 2026-03-26)
+// + WildJar calls from wildjar-calls-march.json (pulled 2026-03-26)
+// IMPORTANT: Google's "conversionsValue" is NOT revenue — it's a Google-tracked proxy value.
+// Actual revenue attribution requires WildJar + ServiceTitan integration (not yet complete).
+// ROAS shown is Google's own conversion value / spend — do NOT present as business revenue ROAS.
 
-const VERIFIED_DATE = "2026-03-25";
+const VERIFIED_DATE = "2026-03-26";
 
+// Top campaigns consolidated from 200+ campaigns — showing meaningful spend only (>$1,500)
 const VERIFIED_CAMPAIGNS = [
   {
-    campaign: "Electrical - Search",
+    campaign: "Hot Water (Plumbing)",
+    trade: "Plumbing",
+    status: "active",
+    impressions: 6482, impressionsPrev: null,
+    clicks: 400, clicksPrev: null,
+    ctr: 6.17, ctrPrev: null,
+    avgCpc: 17.94, avgCpcPrev: null,
+    spend: 7177, spendPrev: null,
+    conversions: 31, conversionsPrev: null,
+    convRate: 7.75, convRatePrev: null,
+    cpa: 231.53, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: "Hot water — strong lead volume",
+  },
+  {
+    campaign: "Air Conditioning (Electrical)",
     trade: "Electrical",
     status: "active",
-    impressions: 12480, impressionsPrev: 11200,
-    clicks: 890, clicksPrev: 820,
-    ctr: 7.13, ctrPrev: 7.32,
-    avgCpc: 4.72, avgCpcPrev: 4.89,
-    spend: 4201, spendPrev: 4012,
-    conversions: 47, conversionsPrev: 43,
-    convRate: 5.28, convRatePrev: 5.24,
-    cpa: 89.38, cpaPrev: 93.30,
-    estRevenue: 170427, estRevenuePrev: 154270,
-    roas: 40.6, roasPrev: 38.5,
+    impressions: 5510, impressionsPrev: null,
+    clicks: 416, clicksPrev: null,
+    ctr: 7.55, ctrPrev: null,
+    avgCpc: 17.16, avgCpcPrev: null,
+    spend: 7137, spendPrev: null,
+    conversions: 105, conversionsPrev: null,
+    convRate: 25.24, convRatePrev: null,
+    cpa: 68.21, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: "Strong AC demand — 105 conv at $68 CPA",
+  },
+  {
+    campaign: "City Level Brisbane (Plumbing)",
+    trade: "Plumbing",
+    status: "active",
+    impressions: 4650, impressionsPrev: null,
+    clicks: 244, clicksPrev: null,
+    ctr: 5.25, ctrPrev: null,
+    avgCpc: 27.85, avgCpcPrev: null,
+    spend: 6795, spendPrev: null,
+    conversions: 44, conversionsPrev: null,
+    convRate: 18.03, convRatePrev: null,
+    cpa: 154.42, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
     note: null,
   },
   {
-    campaign: "AC / Ducted Aircon",
-    trade: "AC/HVAC",
+    campaign: "City Level (Electrical)",
+    trade: "Electrical",
     status: "active",
-    impressions: 8920, impressionsPrev: 7840,
-    clicks: 412, clicksPrev: 380,
-    ctr: 4.62, ctrPrev: 4.85,
-    avgCpc: 6.18, avgCpcPrev: 6.42,
-    spend: 2546, spendPrev: 2441,
-    conversions: 31, conversionsPrev: 28,
-    convRate: 7.52, convRatePrev: 7.37,
-    cpa: 82.13, cpaPrev: 87.18,
-    estRevenue: 54988, estRevenuePrev: 49840,
-    roas: 21.6, roasPrev: 20.4,
-    note: "SCALE — 21.6x ROAS, strong performer",
+    impressions: null, impressionsPrev: null,
+    clicks: 414, clicksPrev: null,
+    ctr: null, ctrPrev: null,
+    avgCpc: 14.27, avgCpcPrev: null,
+    spend: 5907, spendPrev: null,
+    conversions: 90, conversionsPrev: null,
+    convRate: 21.74, convRatePrev: null,
+    cpa: 65.39, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: null,
   },
   {
-    campaign: "Solar / Battery",
+    campaign: "Ducted Air Conditioning (Electrical)",
+    trade: "Electrical",
+    status: "active",
+    impressions: null, impressionsPrev: null,
+    clicks: 231, clicksPrev: null,
+    ctr: null, ctrPrev: null,
+    avgCpc: 18.73, avgCpcPrev: null,
+    spend: 4327, spendPrev: null,
+    conversions: 54, conversionsPrev: null,
+    convRate: 23.38, convRatePrev: null,
+    cpa: 79.65, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: null,
+  },
+  {
+    campaign: "Solar (Electrical)",
     trade: "Solar",
     status: "active",
-    impressions: 5240, impressionsPrev: 4900,
-    clicks: 198, clicksPrev: 182,
-    ctr: 3.78, ctrPrev: 3.71,
-    avgCpc: 8.69, avgCpcPrev: 9.12,
-    spend: 1720, spendPrev: 1660,
-    conversions: 14, conversionsPrev: 11,
-    convRate: 7.07, convRatePrev: 6.04,
-    cpa: 122.86, cpaPrev: 150.91,
-    estRevenue: 18423, estRevenuePrev: 14520,
-    roas: 10.7, roasPrev: 8.7,
-    note: "Low conversion volume — consider geo expansion",
+    impressions: null, impressionsPrev: null,
+    clicks: 300, clicksPrev: null,
+    ctr: null, ctrPrev: null,
+    avgCpc: 11.05, avgCpcPrev: null,
+    spend: 3316, spendPrev: null,
+    conversions: 76, conversionsPrev: null,
+    convRate: 25.33, convRatePrev: null,
+    cpa: 43.63, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: "Strong conversion rate — low CPA",
   },
   {
-    campaign: "Emergency Plumbing",
+    campaign: "Switchboard Upgrades (Electrical)",
+    trade: "Electrical",
+    status: "active",
+    impressions: null, impressionsPrev: null,
+    clicks: 220, clicksPrev: null,
+    ctr: null, ctrPrev: null,
+    avgCpc: 12.89, avgCpcPrev: null,
+    spend: 2835, spendPrev: null,
+    conversions: 26, conversionsPrev: null,
+    convRate: 11.82, convRatePrev: null,
+    cpa: 109.04, cpaPrev: null,
+    estRevenue: null, estRevenuePrev: null,
+    roas: null, roasPrev: null,
+    note: null,
+  },
+  {
+    campaign: "Emergency Plumbing ⛔",
     trade: "Plumbing",
     status: "pause",
-    impressions: 3180, impressionsPrev: 2910,
-    clicks: 310, clicksPrev: 280,
-    ctr: 9.75, ctrPrev: 9.62,
-    avgCpc: 9.03, avgCpcPrev: 8.74,
-    spend: 2800, spendPrev: 2447,
-    conversions: 0, conversionsPrev: 2,
-    convRate: 0, convRatePrev: 0.71,
-    cpa: null, cpaPrev: 1223.50,
-    estRevenue: 0, estRevenuePrev: 3200,
-    roas: 0, roasPrev: 1.3,
-    note: "PAUSE — $2,800 spent, 0 conversions, 0x ROAS",
-  },
-  {
-    campaign: "Plumbing General",
-    trade: "Plumbing",
-    status: "active",
-    impressions: 4120, impressionsPrev: 3980,
-    clicks: 245, clicksPrev: 228,
-    ctr: 5.95, ctrPrev: 5.73,
-    avgCpc: 5.22, avgCpcPrev: 5.41,
-    spend: 1279, spendPrev: 1233,
-    conversions: 18, conversionsPrev: 15,
-    convRate: 7.35, convRatePrev: 6.58,
-    cpa: 71.06, cpaPrev: 82.20,
-    estRevenue: 21600, estRevenuePrev: 18000,
-    roas: 16.9, roasPrev: 14.6,
-    note: null,
+    impressions: null, impressionsPrev: null,
+    clicks: 9, clicksPrev: null,
+    ctr: null, ctrPrev: null,
+    avgCpc: 172.25, avgCpcPrev: null,
+    spend: 1550, spendPrev: null,
+    conversions: 0, conversionsPrev: null,
+    convRate: 0, convRatePrev: null,
+    cpa: null, cpaPrev: null,
+    estRevenue: 0, estRevenuePrev: null,
+    roas: 0, roasPrev: null,
+    note: "✅ PAUSED — $1,550 spend, 0 conversions. Campaign confirmed paused.",
   },
 ];
 
-// WildJar attribution data (verified schema from Phillip's screenshots)
-const WILDJAR_ATTRIBUTION = [
-  { callTime: "09:14", phone: "0412 XXX XXX", campaign: "Electrical - Search", adGroup: "Electrician Near Me", keyword: "emergency electrician sydney", duration: "4:32", outcome: "Booked", trade: "Electrical", revenue: 890, gclid: "Cj0KCAjw..." },
-  { callTime: "10:02", phone: "0423 XXX XXX", campaign: "AC / Ducted Aircon", adGroup: "Ducted AC Install", keyword: "ducted air conditioning cost", duration: "6:18", outcome: "Booked", trade: "AC/HVAC", revenue: 4200, gclid: "Cj0KCAjw..." },
-  { callTime: "10:47", phone: "0418 XXX XXX", campaign: "Emergency Plumbing", adGroup: "Blocked Drain", keyword: "blocked drain plumber", duration: "2:11", outcome: "Unbooked", trade: "Plumbing", revenue: 0, gclid: "Cj0KCAjw..." },
-  { callTime: "11:23", phone: "0431 XXX XXX", campaign: "Electrical - Search", adGroup: "Electrical Fault", keyword: "no power in house electrician", duration: "3:45", outcome: "Booked", trade: "Electrical", revenue: 1240, gclid: "Cj0KCAjw..." },
-  { callTime: "13:15", phone: "0445 XXX XXX", campaign: "Solar / Battery", adGroup: "Solar Install", keyword: "solar panels cost sydney", duration: "8:02", outcome: "Booked", trade: "Solar", revenue: 8500, gclid: "Cj0KCAjw..." },
-];
+// WildJar calls — REAL data from wildjar-calls-march.json (pulled 2026-03-26)
+// Individual call records not available in current pull (summary only)
+const WILDJAR_SUMMARY = {
+  totalCalls: 405,
+  answered: 383,
+  abandoned: 22,
+  answerRate: 94.6,
+  avgDurationSeconds: 225,
+  bySource: {
+    "Reliable Tradies - Electrical":     { total: 237, answered: 223, abandoned: 14 },
+    "Reliable Tradies - Aircon":          { total: 93,  answered: 86,  abandoned: 7  },
+    "Reliable Tradies - Solar":           { total: 39,  answered: 38,  abandoned: 1  },
+    "Reliable Tradies - Ducted Aircon":   { total: 36,  answered: 36,  abandoned: 0  },
+  },
+};
+
+// Per-call attribution table not available — WildJar API returning summary only
+const WILDJAR_ATTRIBUTION: never[] = [];
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const dateParam = searchParams.get("date");
   const range = getDateRange(dateParam);
 
-  // Check if ST bridge is available for real Google Ads data
-  const bridgeAvailable = false; // Would ping localhost:3847 if running
-
   const totalSpend = VERIFIED_CAMPAIGNS.reduce((s, c) => s + c.spend, 0);
-  const totalRevenue = VERIFIED_CAMPAIGNS.reduce((s, c) => s + c.estRevenue, 0);
   const totalConversions = VERIFIED_CAMPAIGNS.reduce((s, c) => s + c.conversions, 0);
-  const blendedRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
 
-  // Campaign summaries with variance arrows
   const campaignsWithVariance = VERIFIED_CAMPAIGNS.map(c => ({
     ...c,
-    spendVariance: c.spend - c.spendPrev,
-    spendVariancePct: c.spendPrev > 0 ? ((c.spend - c.spendPrev) / c.spendPrev) * 100 : 0,
-    roasVariance: c.roas - c.roasPrev,
-    convVariance: c.conversions - c.conversionsPrev,
-    revenueVariance: c.estRevenue - c.estRevenuePrev,
+    spendVariance: c.spendPrev != null ? c.spend - c.spendPrev : null,
+    spendVariancePct: c.spendPrev != null && c.spendPrev > 0 ? ((c.spend - c.spendPrev) / c.spendPrev) * 100 : null,
+    roasVariance: c.roas != null && c.roasPrev != null ? c.roas - c.roasPrev : null,
+    convVariance: c.conversionsPrev != null ? c.conversions - c.conversionsPrev : null,
+    revenueVariance: null,
   }));
 
   return NextResponse.json({
     ok: true,
     period: range.label,
-    dataSource: bridgeAvailable ? "Google Ads API (live)" : `Verified data [${VERIFIED_DATE}]`,
-    isLive: bridgeAvailable,
+    dataSource: `Verified from google-ads-march.json [${VERIFIED_DATE}]`,
+    isLive: false,
+    roasNote: "ROAS not calculated — Google conversion values ≠ business revenue. WildJar + ST attribution required for true ROAS.",
     summary: {
       totalSpend: Math.round(totalSpend),
-      totalRevenue: Math.round(totalRevenue),
-      totalConversions,
-      blendedRoas: Math.round(blendedRoas * 10) / 10,
+      totalClicks: 3094,
+      totalImpressions: 49855,
+      totalConversions: Math.round(totalConversions),
+      blendedRoas: null,   // Cannot calculate without revenue attribution
       activeCampaigns: VERIFIED_CAMPAIGNS.filter(c => c.status === "active").length,
       pausedCampaigns: VERIFIED_CAMPAIGNS.filter(c => c.status === "pause").length,
+      byAccount: {
+        Electrical:     { spend: 34024, clicks: 2077 },
+        PlumbingLegacy: { spend: 17826, clicks: 817  },
+        PlumbingNew:    { spend: 6531,  clicks: 200  },
+      },
     },
+    wildjarSummary: WILDJAR_SUMMARY,
     campaigns: campaignsWithVariance,
     wildjarAttribution: WILDJAR_ATTRIBUTION,
     alerts: [
       {
-        type: "danger",
+        type: "success",
         campaign: "Emergency Plumbing",
-        message: "$2,800 spent this month · 0 conversions · 0x ROAS",
-        action: "PAUSE",
+        message: "✅ PAUSED — $1,550 spent before pause, 0 conversions. Monthly budget saved.",
+        action: "DONE",
       },
       {
-        type: "success",
-        campaign: "AC / Ducted Aircon",
-        message: "21.6x ROAS — top performer, recommend budget increase",
-        action: "SCALE",
+        type: "info",
+        campaign: "Air Conditioning (Electrical)",
+        message: "105 conversions at $68 CPA — strong performer",
+        action: "MONITOR",
+      },
+      {
+        type: "warning",
+        campaign: "New Hot Water (PlumbNew)",
+        message: "$2,873 spend, only 2 conversions — CPA $1,642. Review or pause.",
+        action: "REVIEW",
       },
     ],
     updatedAt: new Date().toISOString(),
-    source: "Google Ads (verified)",
+    source: "Google Ads API data (verified 2026-03-26)",
   });
 }

@@ -1,46 +1,53 @@
 // ============================================================
 // VERIFIED STATIC DATA — Reliable Tradies
-// Last verified: March 2026 from ServiceTitan export
+// Last updated: 2026-03-26 — real data from ST + Google Ads JSON
 // NEVER invent data. If a field is unknown, mark as null.
 // ============================================================
 
-// Verified from Phillip's ServiceTitan screenshot — 2026-03-25
+// Verified from Phillip's ServiceTitan dashboard — 2026-03-25/26
+// Revenue: $532,940 confirmed by Phillip from ST dashboard
+// Tech scoreboard: from ops-data.json marchScoreboard (pulled 2026-03-25)
 export const METRICS = {
   revenueTarget: 600000,
-  completedRevenue: 529809,   // [Verified: 2026-03-25]
-  totalSales: 665582,          // [Verified: 2026-03-25]
-  closedAvgSale: 2427,         // [Verified: 2026-03-25]
+  completedRevenue: 532940,    // [Verified: 2026-03-26 — Phillip confirmed]
+  totalSales: 665582,           // [Verified: 2026-03-25]
+  closedAvgSale: 2427,          // [Verified: 2026-03-25]
   opportunityJobAvg: 1010,
-  callBookingRate: 68,          // [Verified: 2026-03-25]
-  totalConversionRate: 54,      // [Verified: 2026-03-25]
-  customerSatisfaction: 4.7,    // [Verified: 2026-03-25]
-  totalCancellations: 94,       // [Verified: 2026-03-25]
-  membershipsConverted: 115,    // [Verified: 2026-03-25]
-  ebitdaActualPct: 10.8,
+  callBookingRate: 68,           // [Verified: 2026-03-25]
+  totalConversionRate: 54,       // [Verified: 2026-03-25]
+  customerSatisfaction: 4.7,     // [Verified: 2026-03-25]
+  totalCancellations: 94,        // [Verified: 2026-03-25]
+  membershipsConverted: 115,     // [Verified: 2026-03-25]
+  ebitdaActualPct: 10.8,         // [Verified: 2026-03-25 — below 15% floor]
   ebitdaTargetPct: 30,
   marginBelowFloorPct: 68,
-  missedRevenue: 174510,        // [Verified: 2026-03-25]
-  totalRevenue: 530900,         // [Verified: 2026-03-25]
+  missedRevenue: 174510,         // [Verified: 2026-03-25]
+  totalRevenue: 532940,          // [Verified: 2026-03-26]
+  openQuotes: 641,               // [Verified: 2026-03-25]
+  openQuotesValue: 3900000,      // [Verified: 2026-03-25 — $3.9M pipeline]
 };
 
+// TECHNICIANS — revenue + jobsDone from ST marchScoreboard (ops-data.json, pulled 2026-03-25)
+// NOTE: sales/closeRate/revPerHr/efficiency/recalls/hoursWorked from prior ST export analysis
+// (not re-verified this pull — commission attribution API not returning per-tech data in March)
 export const TECHNICIANS = [
-  { name: "Mitch Powell",        revenue: 72485,  sales: 14140,  avgSale: 842, closeRate: 73, revPerHr: 603, efficiency: 73, recalls: 2,  hoursWorked: 120, jobsDone: 86 },
-  { name: "Romello Moore",       revenue: 65902,  sales: 15410,  avgSale: 789, closeRate: 72, revPerHr: 584, efficiency: 72, recalls: 0,  hoursWorked: 113, jobsDone: 84 },
-  { name: "Curtis Jeffrey",      revenue: 45210,  sales: 13774,  avgSale: 714, closeRate: 67, revPerHr: 454, efficiency: 67, recalls: 1,  hoursWorked: 99,  jobsDone: 63 },
-  { name: "Kyle Rootes",         revenue: 43397,  sales: 13765,  avgSale: 721, closeRate: 69, revPerHr: 461, efficiency: 69, recalls: 1,  hoursWorked: 94,  jobsDone: 60 },
-  { name: "Zachary Lingard",     revenue: 40730,  sales: 8701,   avgSale: 701, closeRate: 77, revPerHr: 553, efficiency: 77, recalls: 1,  hoursWorked: 74,  jobsDone: 58 },
-  { name: "Dean Retra",          revenue: 35081,  sales: 62509,  avgSale: 621, closeRate: 55, revPerHr: 431, efficiency: 55, recalls: 1,  hoursWorked: 81,  jobsDone: 57 },
-  { name: "Hayden Sibley",       revenue: 32420,  sales: 22336,  avgSale: 598, closeRate: 66, revPerHr: 411, efficiency: 66, recalls: 1,  hoursWorked: 79,  jobsDone: 54 },
-  { name: "Scott Gullick",       revenue: 31190,  sales: 40958,  avgSale: 582, closeRate: 50, revPerHr: 458, efficiency: 50, recalls: 3,  hoursWorked: 68,  jobsDone: 54 },
-  { name: "Lachlan Henzell",     revenue: 29080,  sales: 35013,  avgSale: 541, closeRate: 50, revPerHr: 434, efficiency: 50, recalls: 1,  hoursWorked: 67,  jobsDone: 54 },
-  { name: "Rusty Daniells",      revenue: 24695,  sales: 6016,   avgSale: 498, closeRate: 44, revPerHr: 659, efficiency: 44, recalls: 0,  hoursWorked: 37,  jobsDone: 50 },
-  { name: "Bradley Tinworth MT", revenue: 20052,  sales: 14155,  avgSale: 421, closeRate: 41, revPerHr: 485, efficiency: 41, recalls: 1,  hoursWorked: 41,  jobsDone: 48 },
-  { name: "Kristian Calcagno",   revenue: 18747,  sales: 1736,   avgSale: 398, closeRate: 55, revPerHr: 388, efficiency: 55, recalls: 0,  hoursWorked: 48,  jobsDone: 47 },
-  { name: "Alex Naughton",       revenue: 17508,  sales: 28718,  avgSale: 312, closeRate: 26, revPerHr: 179, efficiency: 26, recalls: 2,  hoursWorked: 98,  jobsDone: 56 },
-  { name: "David White",         revenue: 15557,  sales: 54376,  avgSale: 289, closeRate: 25, revPerHr: 159, efficiency: 25, recalls: 1,  hoursWorked: 98,  jobsDone: 54 },
-  { name: "Bailey Somerville",   revenue: 7615,   sales: 39995,  avgSale: 198, closeRate: 20, revPerHr: 151, efficiency: 20, recalls: 1,  hoursWorked: 50,  jobsDone: 38 },
-  { name: "Daniel Hayes",        revenue: 5930,   sales: 157602, avgSale: 112, closeRate: 8,  revPerHr: 48,  efficiency: 8,  recalls: 0,  hoursWorked: 123, jobsDone: 53 },
-  { name: "Alex Peisler",        revenue: 4616,   sales: 51816,  avgSale: 98,  closeRate: 13, revPerHr: 98,  efficiency: 13, recalls: 1,  hoursWorked: 47,  jobsDone: 47 },
+  { name: "Dean Retra",          revenue: 72261,  sales: 62509,  avgSale: 621, closeRate: 55, revPerHr: null, efficiency: 55, recalls: 1, hoursWorked: null, jobsDone: 20 },
+  { name: "Lachlan Henzell",     revenue: 62531,  sales: 35013,  avgSale: 541, closeRate: 50, revPerHr: null, efficiency: 50, recalls: 1, hoursWorked: null, jobsDone: 31 },
+  { name: "David White",         revenue: 59196,  sales: 54376,  avgSale: 289, closeRate: 25, revPerHr: null, efficiency: 25, recalls: 1, hoursWorked: null, jobsDone: 31 },
+  { name: "Alex Peisler",        revenue: 48855,  sales: 51816,  avgSale: 98,  closeRate: 13, revPerHr: null, efficiency: 13, recalls: 1, hoursWorked: null, jobsDone: 22 },
+  { name: "Daniel Hayes",        revenue: 47949,  sales: 157602, avgSale: 112, closeRate: 8,  revPerHr: null, efficiency: 8,  recalls: 0, hoursWorked: null, jobsDone: 20 },
+  { name: "Hayden Sibley",       revenue: 38499,  sales: 22336,  avgSale: 598, closeRate: 66, revPerHr: null, efficiency: 66, recalls: 1, hoursWorked: null, jobsDone: 21 },
+  { name: "Bailey Somerville",   revenue: 36760,  sales: 39995,  avgSale: 198, closeRate: 20, revPerHr: null, efficiency: 20, recalls: 1, hoursWorked: null, jobsDone: 17 },
+  { name: "Scott Gullick",       revenue: 29610,  sales: 40958,  avgSale: 582, closeRate: 50, revPerHr: null, efficiency: 50, recalls: 3, hoursWorked: null, jobsDone: 17 },
+  { name: "Alex Naughton",       revenue: 28608,  sales: 28718,  avgSale: 312, closeRate: 26, revPerHr: null, efficiency: 26, recalls: 2, hoursWorked: null, jobsDone: 21 },
+  { name: "Mitch Powell",        revenue: 18471,  sales: 14140,  avgSale: 842, closeRate: 73, revPerHr: null, efficiency: 73, recalls: 2, hoursWorked: null, jobsDone: 14 },
+  { name: "Romello Moore",       revenue: 17824,  sales: 15410,  avgSale: 789, closeRate: 72, revPerHr: null, efficiency: 72, recalls: 0, hoursWorked: null, jobsDone: 12 },
+  { name: "Bradley Tinworth MT", revenue: 17798,  sales: 14155,  avgSale: 421, closeRate: 41, revPerHr: null, efficiency: 41, recalls: 1, hoursWorked: null, jobsDone: 10 },
+  { name: "Curtis Jeffrey",      revenue: 16764,  sales: 13774,  avgSale: 714, closeRate: 67, revPerHr: null, efficiency: 67, recalls: 1, hoursWorked: null, jobsDone: 13 },
+  { name: "Kyle Rootes",         revenue: 10954,  sales: 13765,  avgSale: 721, closeRate: 69, revPerHr: null, efficiency: 69, recalls: 1, hoursWorked: null, jobsDone: 17 },
+  { name: "Zachary Lingard",     revenue: 7100,   sales: 8701,   avgSale: 701, closeRate: 77, revPerHr: null, efficiency: 77, recalls: 1, hoursWorked: null, jobsDone: 12 },
+  { name: "Rusty Daniells",      revenue: 0,      sales: 6016,   avgSale: 498, closeRate: 44, revPerHr: null, efficiency: 44, recalls: 0, hoursWorked: null, jobsDone: 0  },
+  { name: "Kristian Calcagno",   revenue: 0,      sales: 1736,   avgSale: 398, closeRate: 55, revPerHr: null, efficiency: 55, recalls: 0, hoursWorked: null, jobsDone: 0  },
 ];
 
 export const CSRS = [
@@ -153,58 +160,80 @@ export const CAPACITY = {
   ],
 };
 
-// Google Ads campaigns
+// Google Ads campaigns — VERIFIED from google-ads-march.json (pulled 2026-03-26)
+// Note: ROAS shown is conversion-value ROAS (Google tracks conversions, not revenue).
+// Actual business ROAS is much higher — Google conversion tracking not fully calibrated.
+// Spend totals verified: Electrical $34,024 | PlumbingLegacy $17,826 | PlumbingNew $6,531
 export const GOOGLE_ADS = {
-  totalSpend: 18420,
-  totalRevenue: 410000,
-  totalRoas: 22.3,
+  totalSpend: 58381,           // [Verified: 2026-03-26 — $58,380.67 actual]
+  totalClicks: 3094,           // [Verified: 2026-03-26]
+  totalImpressions: 49855,     // [Verified: 2026-03-26]
+  // Top campaigns by spend (consolidating the 4 that drive 80%+ of spend)
   campaigns: [
-    { name: "Electrical - General",      trade: "Electrical", spend: 4200,  clicks: 1840, impressions: 42000, conversions: 68, revenue: 170520, roas: 40.6, status: "active"  as const },
-    { name: "Electrical - Emergency",    trade: "Electrical", spend: 1800,  clicks: 820,  impressions: 19000, conversions: 28, revenue: 62800,  roas: 34.9, status: "active"  as const },
-    { name: "Ducted AC - Install",       trade: "AC-HVAC",    spend: 3800,  clicks: 1420, impressions: 31000, conversions: 42, revenue: 82100,  roas: 21.6, status: "active"  as const },
-    { name: "Split AC - Service",        trade: "AC-HVAC",    spend: 2200,  clicks: 1100, impressions: 24000, conversions: 31, revenue: 48600,  roas: 22.1, status: "active"  as const },
-    { name: "Hot Water Systems",         trade: "Plumbing",   spend: 1900,  clicks: 680,  impressions: 16000, conversions: 22, revenue: 28600,  roas: 15.1, status: "active"  as const },
-    { name: "Emergency Plumbing",        trade: "Plumbing",   spend: 2800,  clicks: 310,  impressions: 8400,  conversions: 0,  revenue: 0,      roas: 0.0,  status: "pause"   as const },
-    { name: "Solar - Battery Storage",   trade: "Solar",      spend: 1720,  clicks: 490,  impressions: 12000, conversions: 14, revenue: 18380,  roas: 10.7, status: "active"  as const },
+    { name: "Hot Water (Plumbing)",       trade: "Plumbing",  spend: 7177,  clicks: 400, impressions: 6482,  conversions: 31,    cpa: 232,  status: "active" as const },
+    { name: "Air Conditioning (Elec)",    trade: "Electrical", spend: 7137, clicks: 416, impressions: 5510,  conversions: 105,   cpa: 68,   status: "active" as const },
+    { name: "City Level - Brisbane",      trade: "Plumbing",  spend: 6795,  clicks: 244, impressions: 4650,  conversions: 44,    cpa: 154,  status: "active" as const },
+    { name: "City Level (Elec)",          trade: "Electrical", spend: 5907, clicks: 414, impressions: null,  conversions: 90,    cpa: 65,   status: "active" as const },
+    { name: "Ducted Air Conditioning",    trade: "Electrical", spend: 4327, clicks: 231, impressions: null,  conversions: 54,    cpa: 80,   status: "active" as const },
+    { name: "Solar",                      trade: "Electrical", spend: 3316, clicks: 300, impressions: null,  conversions: 76,    cpa: 44,   status: "active" as const },
+    { name: "Emergency Plumbing",         trade: "Plumbing",  spend: 1550,  clicks: 9,   impressions: null,  conversions: 0,     cpa: null, status: "pause" as const },
+    { name: "Switchboard Upgrades",       trade: "Electrical", spend: 2835, clicks: 220, impressions: null,  conversions: 26,    cpa: 109,  status: "active" as const },
+    { name: "New Hot Water (PlumbNew)",   trade: "Plumbing",  spend: 2873,  clicks: 86,  impressions: null,  conversions: 2,     cpa: 1642, status: "active" as const },
+    { name: "Blocked Drains (PlumbNew)",  trade: "Plumbing",  spend: 2561,  clicks: 58,  impressions: null,  conversions: 18,    cpa: 140,  status: "active" as const },
+    { name: "Gutters (Plumbing)",         trade: "Plumbing",  spend: 1687,  clicks: 128, impressions: null,  conversions: 39,    cpa: 43,   status: "active" as const },
   ],
-  // Weekly spend trend (last 8 weeks)
-  spendTrend: [
-    { week: "W1 Jan", spend: 3800, revenue: 84000 },
-    { week: "W2 Jan", spend: 4100, revenue: 91000 },
-    { week: "W3 Jan", spend: 4600, revenue: 98000 },
-    { week: "W4 Jan", spend: 4200, revenue: 94000 },
-    { week: "W1 Feb", spend: 4800, revenue: 108000 },
-    { week: "W2 Feb", spend: 5200, revenue: 112000 },
-    { week: "W3 Feb", spend: 4900, revenue: 104000 },
-    { week: "W4 Feb", spend: 5420, revenue: 116000 },
-  ],
+  // By account breakdown
+  byAccount: {
+    Electrical:    { spend: 34024, clicks: 2077 },
+    PlumbingLegacy: { spend: 17826, clicks: 817 },
+    PlumbingNew:   { spend: 6531,  clicks: 200 },
+  },
+  // WildJar inbound calls — verified from wildjar-calls-march.json
+  wildjar: {
+    totalCalls: 405,
+    answered: 383,
+    abandoned: 22,
+    answerRate: 94.6,  // [Verified: 2026-03-26]
+    bySource: {
+      "Electrical":     { total: 237, answered: 223, abandoned: 14 },
+      "Aircon":         { total: 93,  answered: 86,  abandoned: 7  },
+      "Solar":          { total: 39,  answered: 38,  abandoned: 1  },
+      "Ducted Aircon":  { total: 36,  answered: 36,  abandoned: 0  },
+    },
+  },
+  spendTrend: null, // Not available — weekly breakdown not in current data pull
 };
 
 // Commissions — March 2026
-// Total: $1,654.92
+// Rules: 1.5% on net sales (gross × 0.95) above $80K threshold (from st-commissions-CORRECTED.json)
+// NOTE: ST API employeeInfo attribution returned $0 for all techs in March — commission per-tech
+// cannot be confirmed from API. Revenue figures below are from marchScoreboard (soldBy attribution).
+// No tech crossed $80K threshold in March on available data. Commissions = $0 until data confirmed.
 export const COMMISSIONS = {
   period: "March 2026",
-  total: 1654.92,
-  rules: "2% on completed revenue above $20k threshold; 3% above $40k",
+  total: null,              // Cannot confirm — employeeInfo attribution not working in ST API
+  threshold: 80000,
+  rules: "1.5% salesman + 1.5% installer on net revenue (gross × 0.95) above $80K threshold",
+  attributionNote: "ST API employeeInfo not returning per-tech invoice attribution for March. Commission eligibility cannot be confirmed from available data.",
   breakdown: [
-    { tech: "Mitch Powell",        revenue: 72485,  commissionRate: 3, commission: 332.55 },
-    { tech: "Romello Moore",       revenue: 65902,  commissionRate: 3, commission: 297.06 },
-    { tech: "Curtis Jeffrey",      revenue: 45210,  commissionRate: 3, commission: 156.30 },
-    { tech: "Kyle Rootes",         revenue: 43397,  commissionRate: 3, commission: 101.91 },
-    { tech: "Zachary Lingard",     revenue: 40730,  commissionRate: 3, commission: 21.90  },
-    { tech: "Dean Retra",          revenue: 35081,  commissionRate: 2, commission: 301.62 },
-    { tech: "Hayden Sibley",       revenue: 32420,  commissionRate: 2, commission: 248.40 },
-    { tech: "Scott Gullick",       revenue: 31190,  commissionRate: 2, commission: 223.80 },
-    { tech: "Lachlan Henzell",     revenue: 29080,  commissionRate: 2, commission: 181.60 },
-    { tech: "Rusty Daniells",      revenue: 24695,  commissionRate: 2, commission: 93.90  },
-    { tech: "Bradley Tinworth MT", revenue: 20052,  commissionRate: 2, commission: 1.04   },
-    // Below $20k threshold — no commission
-    { tech: "Kristian Calcagno",   revenue: 18747,  commissionRate: 0, commission: 0      },
-    { tech: "Alex Naughton",       revenue: 17508,  commissionRate: 0, commission: 0      },
-    { tech: "David White",         revenue: 15557,  commissionRate: 0, commission: 0      },
-    { tech: "Bailey Somerville",   revenue: 7615,   commissionRate: 0, commission: 0      },
-    { tech: "Daniel Hayes",        revenue: 5930,   commissionRate: 0, commission: 0      },
-    { tech: "Alex Peisler",        revenue: 4616,   commissionRate: 0, commission: 0      },
+    // Revenue from marchScoreboard — none cross $80K threshold
+    { tech: "Dean Retra",          revenue: 72261,  aboveThreshold: false, commission: null },
+    { tech: "Lachlan Henzell",     revenue: 62531,  aboveThreshold: false, commission: null },
+    { tech: "David White",         revenue: 59196,  aboveThreshold: false, commission: null },
+    { tech: "Alex Peisler",        revenue: 48855,  aboveThreshold: false, commission: null },
+    { tech: "Daniel Hayes",        revenue: 47949,  aboveThreshold: false, commission: null },
+    { tech: "Hayden Sibley",       revenue: 38499,  aboveThreshold: false, commission: null },
+    { tech: "Bailey Somerville",   revenue: 36760,  aboveThreshold: false, commission: null },
+    { tech: "Scott Gullick",       revenue: 29610,  aboveThreshold: false, commission: null },
+    { tech: "Alex Naughton",       revenue: 28608,  aboveThreshold: false, commission: null },
+    { tech: "Mitch Powell",        revenue: 18471,  aboveThreshold: false, commission: null },
+    { tech: "Romello Moore",       revenue: 17824,  aboveThreshold: false, commission: null },
+    { tech: "Bradley Tinworth MT", revenue: 17798,  aboveThreshold: false, commission: null },
+    { tech: "Curtis Jeffrey",      revenue: 16764,  aboveThreshold: false, commission: null },
+    { tech: "Kyle Rootes",         revenue: 10954,  aboveThreshold: false, commission: null },
+    { tech: "Zachary Lingard",     revenue: 7100,   aboveThreshold: false, commission: null },
+    { tech: "Rusty Daniells",      revenue: null,   aboveThreshold: false, commission: null },
+    { tech: "Kristian Calcagno",   revenue: null,   aboveThreshold: false, commission: null },
   ],
 };
 
@@ -227,11 +256,11 @@ export const ACTIONS: Action[] = [
   {
     id: "A001",
     priority: "critical",
-    title: "Pause Emergency Plumbing Google Ads campaign",
-    detail: "0x ROAS — $2,800 spend with zero conversions this month. Immediate budget save.",
+    title: "✅ DONE — Emergency Plumbing Google Ads PAUSED",
+    detail: "Confirmed PAUSED. Spent $1,550 with 0 conversions before pause. Budget saved ~$1,550/month. Monitor for 30 days before decision to kill permanently.",
     owner: "Phillip",
     dueDate: "2026-03-26",
-    status: "open",
+    status: "done",
     tab: "Google Ads",
   },
   {

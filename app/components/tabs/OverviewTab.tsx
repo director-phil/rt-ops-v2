@@ -6,19 +6,23 @@ import DataPanel, { KpiCompare } from "@/app/components/DataPanel";
 import RevenueTrend from "@/app/components/RevenueTrend";
 import RatesRow     from "@/app/components/RatesRow";
 
-// Verified static numbers from Phillip's ST screenshot — March 2026
+// Verified numbers — updated 2026-03-26
+// completedRevenue: $532,940 confirmed by Phillip from ST dashboard
 const ST_VERIFIED = {
-  totalRevenue: 530900,
+  totalRevenue: 532940,
   missedRevenue: 174510,
   totalSales: 665582,
   closedAvgSale: 2427,
-  completedRevenue: 529809,
+  completedRevenue: 532940,
   callBookingRate: 68,
   totalConversionRate: 54,
   customerSatisfaction: 4.7,
   totalCancellations: 94,
   memberships: 115,
-  verifiedDate: "2026-03-25",
+  openQuotes: 641,
+  openQuotesValue: "3.9M",
+  ebitdaPct: 10.8,
+  verifiedDate: "2026-03-26",
 };
 
 interface RevenueData {
@@ -113,6 +117,28 @@ export default function OverviewTab({ refreshKey }: { refreshKey?: number }) {
               label="Cancellations"
               value={`${ST_VERIFIED.totalCancellations}`}
               icon="🚫"
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <KpiCompare
+              label="EBITDA (est) ⚠ target 30%"
+              value={`${ST_VERIFIED.ebitdaPct}%`}
+              icon="📉"
+            />
+            <KpiCompare
+              label={`Open Quotes ($${ST_VERIFIED.openQuotesValue} pipeline)`}
+              value={`${ST_VERIFIED.openQuotes}`}
+              icon="📋"
+            />
+            <KpiCompare
+              label="Field Techs"
+              value="17"
+              icon="🔧"
+            />
+            <KpiCompare
+              label="Ads Spend MTD"
+              value="$58.4k"
+              icon="📣"
             />
           </div>
         </div>

@@ -27,7 +27,9 @@ export default function TechScorecard() {
   const [division, setDivision] = useState("all");
 
   const sorted = [...TECHNICIANS].sort((a, b) => {
-    const diff = a[sortKey] - b[sortKey];
+    const av = a[sortKey] ?? 0;
+    const bv = b[sortKey] ?? 0;
+    const diff = (av as number) - (bv as number);
     return sortDir === "desc" ? -diff : diff;
   });
 
@@ -107,19 +109,20 @@ export default function TechScorecard() {
                     </div>
                   </td>
                   {COLUMNS.map(col => {
-                    const val = tech[col.key];
+                    const val = tech[col.key] as number | null;
                     const isRevenue = col.key === "revenue";
                     const isRecall = col.key === "recalls";
+                    const numVal = val ?? 0;
                     return (
                       <td key={col.key} className={`px-3 py-3 text-right font-mono text-sm ${
                         isRevenue ? "text-orange-400 font-bold" :
-                        isRecall && val > 2 ? "text-red-400 font-bold" :
-                        isRecall && val === 0 ? "text-green-400" :
-                        col.key === "efficiency" && val >= 70 ? "text-green-400" :
-                        col.key === "efficiency" && val < 40 ? "text-red-400" :
+                        isRecall && numVal > 2 ? "text-red-400 font-bold" :
+                        isRecall && numVal === 0 ? "text-green-400" :
+                        col.key === "efficiency" && numVal >= 70 ? "text-green-400" :
+                        col.key === "efficiency" && numVal < 40 ? "text-red-400" :
                         "text-zinc-300"
                       }`}>
-                        {col.fmt(val)}
+                        {val === null ? "—" : col.fmt(numVal)}
                       </td>
                     );
                   })}
