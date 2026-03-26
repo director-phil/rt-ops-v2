@@ -62,16 +62,12 @@ interface CsrsResponse {
 }
 
 export default function CommissionsTab({ refreshKey }: { refreshKey?: number }) {
-  const params = useSearchParams();
-  // Commissions: allow week/month filters but never "today" (threshold is monthly/weekly not daily)
-  const rawDate = params.get("date") || "mtd";
-  const commDate = rawDate === "today" ? "mtd" : rawDate;
-
+  // Commission is always MTD — threshold is monthly, "today" makes no sense for commissions
   const { data: commData, loading: commLoading, error: commError, updatedAt: commUpdated } =
-    useApi<CommissionsResponse>("/api/commissions", { date: commDate }, refreshKey);
+    useApi<CommissionsResponse>("/api/commissions", { date: "mtd" }, refreshKey);
 
   const { data: csrData, loading: csrLoading, error: csrError, updatedAt: csrUpdated } =
-    useApi<CsrsResponse>("/api/csrs", { date: commDate }, refreshKey);
+    useApi<CsrsResponse>("/api/csrs", { date: "mtd" }, refreshKey);
 
   const [showNonEarners, setShowNonEarners] = useState(false);
 
