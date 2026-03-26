@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 // Google Ads API requires OAuth - we use the Zapier/bridge approach
 // If ST bridge is available, prefer that; otherwise return verified static data
-// NOTE: Google Ads API key (AIzaSyCYPO-1urVGfXOXo8huUu-rcfAAF6icvsc) is a Maps key,
+// NOTE: Google Ads API key (REDACTED_ROTATE_THIS_KEY) is a Maps key,
 // not Google Ads API. Ads API requires OAuth2 developer token.
 // Data below is from the verified screenshots Phillip provided.
 
