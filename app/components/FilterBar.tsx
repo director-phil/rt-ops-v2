@@ -8,11 +8,16 @@ import { useApi } from "@/app/lib/use-api";
 interface TechData { technicians: { name: string }[] }
 
 const DATE_OPTIONS = [
-  { value: "today",     label: "Today" },
-  { value: "week",      label: "This Week" },
-  { value: "mtd",       label: "Month to Date" },
-  { value: "last_month",label: "Last Month" },
-  { value: "custom",    label: "Custom Range" },
+  { value: "today",      label: "Today" },
+  { value: "week",       label: "This Week" },
+  { value: "last_week",  label: "Last Week" },
+  { value: "week_2",     label: "2 Weeks Ago" },
+  { value: "week_3",     label: "3 Weeks Ago" },
+  { value: "week_4",     label: "4 Weeks Ago" },
+  { value: "mtd",        label: "Month to Date" },
+  { value: "last_month", label: "Last Month" },
+  { value: "month_2",    label: "2 Months Ago" },
+  { value: "month_3",    label: "3 Months Ago" },
 ];
 
 const TRADE_OPTIONS = [
