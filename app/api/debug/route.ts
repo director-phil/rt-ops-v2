@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
   const token = await getSTToken();
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
+  const appKey = process.env.SERVICETITAN_APP_KEY!;
   const headers = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
 
   // Check invoices for tech data

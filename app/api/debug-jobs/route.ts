@@ -4,8 +4,8 @@ import { getSTToken } from "@/app/lib/st-auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
+  const appKey = process.env.SERVICETITAN_APP_KEY!;
   const token = await getSTToken();
   const headers = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
 

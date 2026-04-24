@@ -3,8 +3,8 @@ import { getSTToken } from "@/app/lib/st-auth";
 
 export const dynamic = "force-dynamic";
 
-const TENANT_ID = process.env.ST_TENANT_ID!;
-const APP_KEY = process.env.ST_APP_KEY!;
+const TENANT_ID = process.env.SERVICETITAN_TENANT_ID!;
+const APP_KEY = process.env.SERVICETITAN_APP_KEY!;
 
 async function stGet(path: string, params: Record<string, string> = {}): Promise<Record<string, unknown>> {
   const token = await getSTToken();

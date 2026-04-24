@@ -18,8 +18,8 @@ async function getVzToken(): Promise<string> {
 }
 
 export async function GET() {
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey   = process.env.ST_APP_KEY!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
+  const appKey   = process.env.SERVICETITAN_APP_KEY!;
   const token    = await getSTToken();
   const headers  = { Authorization: `Bearer ${token}`, "ST-App-Key": appKey };
 

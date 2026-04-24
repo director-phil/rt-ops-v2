@@ -42,7 +42,7 @@ const parseNum = (v: unknown): number => {
 };
 
 async function fetchTechMetrics(from: string, to: string) {
-  const tenantId = process.env.ST_TENANT_ID!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
 
   // Step 1: bulk fetch all dispatch assignments in date range (2-3 API calls total)
   const assignments = await stFetchAll(

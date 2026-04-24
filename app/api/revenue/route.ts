@@ -21,7 +21,7 @@ async function fetchRevenue(from: string, to: string, tradeFilter: string | null
     pageSize: "500",
   };
 
-  const invoices = await stFetchAll(`/accounting/v2/tenant/${process.env.ST_TENANT_ID}/invoices`, params);
+  const invoices = await stFetchAll(`/accounting/v2/tenant/${process.env.SERVICETITAN_TENANT_ID}/invoices`, params);
 
   let filtered = invoices as Record<string, unknown>[];
 

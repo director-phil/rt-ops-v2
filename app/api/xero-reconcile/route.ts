@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const range = getDateRange(dateParam);
 
   try {
-    const tenantId = process.env.ST_TENANT_ID!;
+    const tenantId = process.env.SERVICETITAN_TENANT_ID!;
 
     // Fetch ST invoices
     const stInvoices = await stFetchAll(`/accounting/v2/tenant/${tenantId}/invoices`, {

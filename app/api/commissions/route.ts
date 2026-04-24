@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const range = getDateRange(dateParam);
 
   try {
-    const tenantId = process.env.ST_TENANT_ID!;
+    const tenantId = process.env.SERVICETITAN_TENANT_ID!;
 
     // Step 1: bulk fetch dispatch assignments for period
     const assignments = await stFetchAll(

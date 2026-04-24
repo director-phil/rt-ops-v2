@@ -14,8 +14,8 @@ export async function getSTToken(): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      client_id: process.env.ST_CLIENT_ID!,
-      client_secret: process.env.ST_CLIENT_SECRET!,
+      client_id: process.env.SERVICETITAN_CLIENT_ID!,
+      client_secret: process.env.SERVICETITAN_CLIENT_SECRET!,
     }),
     cache: "no-store",
   });
@@ -32,8 +32,8 @@ export async function getSTToken(): Promise<string> {
 
 export async function stFetch(path: string, params?: Record<string, string>) {
   const token = await getSTToken();
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
+  const appKey = process.env.SERVICETITAN_APP_KEY!;
 
   const url = new URL(`https://api.servicetitan.io${path.replace("{tenant}", tenantId)}`);
   if (params) {

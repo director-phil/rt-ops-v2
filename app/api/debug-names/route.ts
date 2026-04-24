@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest) {
   const range = getDateRange(null);
   
-  const invoices = await stFetchAll(`/accounting/v2/tenant/${process.env.ST_TENANT_ID!}/invoices`, {
+  const invoices = await stFetchAll(`/accounting/v2/tenant/${process.env.SERVICETITAN_TENANT_ID!}/invoices`, {
     createdOnOrAfter: range.from,
     createdBefore: range.to,
     active: "True",

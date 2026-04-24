@@ -5,8 +5,8 @@ export async function stFetchAll(
   params: Record<string, string> = {},
   maxPages = 20
 ): Promise<unknown[]> {
-  const tenantId = process.env.ST_TENANT_ID!;
-  const appKey = process.env.ST_APP_KEY!;
+  const tenantId = process.env.SERVICETITAN_TENANT_ID!;
+  const appKey = process.env.SERVICETITAN_APP_KEY!;
 
   const allItems: unknown[] = [];
   let page = 1;

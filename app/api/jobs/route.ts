@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
     : null;
 
   try {
-    const tenantId = process.env.ST_TENANT_ID!;
+    const tenantId = process.env.SERVICETITAN_TENANT_ID!;
     const buMap = await fetchBuMap(tenantId);
 
     let enriched = modeParam === "schedule"
