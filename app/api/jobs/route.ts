@@ -5,22 +5,143 @@ import { getDateRange, parseTrade } from "@/app/lib/date-range";
 export const dynamic = "force-dynamic";
 
 const NET_SALE_FACTOR = 0.95;
-const MARGIN_FLOOR = 0.15;
-
-// Business unit ID → trade name mapping (from ST data)
-const BU_TRADE_MAP: Record<number, string> = {
-  115365: "AC/HVAC",
-  134689640: "Electrical",
-  // Additional BUs will fall through to "Other"
-};
 
 function normalizeTrade(buName: string): string {
   const n = (buName || "").toLowerCase();
-  if (n.includes("electrical")) return "Electrical";
-  if (n.includes("hvac") || n.includes("air") || n.includes("ac")) return "AC/HVAC";
-  if (n.includes("solar") || n.includes("battery")) return "Solar";
-  if (n.includes("plumb")) return "Plumbing";
-  return "Other";
+  if (n.includes("electrical")) return "electrical";
+  if (n.includes("hvac") || n.includes("air") || n.includes("ac")) return "hvac";
+  if (n.includes("solar") || n.includes("battery")) return "solar";
+  if (n.includes("plumb")) return "plumbing";
+  return "other";
+}
+
+const parseNum = (v: unknown): number => {
+  const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
+  return isNaN(n) ? 0 : n;
+};
+
+async function fetchBuMap(tenantId: string): Promise<Record<number, string>> {
+  try {
+    const buData = await stFetchAll(
+      `/jpm/v2/tenant/${tenantId}/business-units`,
+      { pageSize: "200" }
+    ) as Record<string, unknown>[];
+    const map: Record<number, string> = {};
+    for (const bu of buData) map[Number(bu.id)] = String(bu.name || "");
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// Dispatch mode: jobs with appointments starting on the given day
+async function fetchScheduledJobs(
+  tenantId: string,
+  range: ReturnType<typeof getDateRange>,
+  buMap: Record<number, string>
+) {
+  // Step 1: appointments starting today
+  const appointments = await stFetchAll(
+    `/jpm/v2/tenant/${tenantId}/appointments`,
+    { startsOnOrAfter: range.from, startsBefore: range.to, pageSize: "500" }
+  ) as Record<string, unknown>[];
+
+  if (appointments.length === 0) return [];
+
+  const jobIds = [...new Set(
+    appointments
+      .map(a => String(a.jobId))
+      .filter(id => id && id !== "0" && id !== "undefined" && id !== "null")
+  )];
+
+  // Build appointment start time map for display
+  const jobToApptStart: Record<string, string> = {};
+  for (const a of appointments) {
+    const jobId = String(a.jobId);
+    if (a.start) jobToApptStart[jobId] = String(a.start);
+  }
+
+  // Step 2: assignments — broaden to 7 days back to catch advance-scheduled jobs
+  const lookbackFrom = new Date(range.from);
+  lookbackFrom.setDate(lookbackFrom.getDate() - 7);
+
+  const assignments = await stFetchAll(
+    `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
+    { modifiedOnOrAfter: lookbackFrom.toISOString(), modifiedBefore: range.to, pageSize: "500" }
+  ) as Record<string, unknown>[];
+
+  const jobIdSet = new Set(jobIds);
+  const jobToTech: Record<string, string> = {};
+  for (const a of assignments) {
+    if (a.status === "Dismissed") continue;
+    const jobId = String(a.jobId);
+    if (!jobIdSet.has(jobId)) continue;
+    const techName = ((a.technicianName as string) || "").trim();
+    if (techName) jobToTech[jobId] = techName;
+  }
+
+  // Step 3: job details by IDs
+  const jobs = await stFetchAll(
+    `/jpm/v2/tenant/${tenantId}/jobs`,
+    { ids: jobIds.join(","), pageSize: "500" }
+  ) as Record<string, unknown>[];
+
+  return jobs.map(job => {
+    const buId = Number(job.businessUnitId) || 0;
+    const buName = buMap[buId] || "";
+    const invoiceTotal = parseNum(job.total);
+    return {
+      jobId: String(job.id),
+      jobNumber: (job.jobNumber as string) || String(job.id),
+      date: jobToApptStart[String(job.id)] || (job.createdOn as string) || "",
+      tech: jobToTech[String(job.id)] || "Unassigned",
+      trade: normalizeTrade(buName),
+      invoiceTotal: Math.round(invoiceTotal),
+      netSale: Math.round(invoiceTotal * NET_SALE_FACTOR),
+      marginFlag: invoiceTotal < 100,
+    };
+  });
+}
+
+// Historical mode: completed jobs in date range (revenue/reporting)
+async function fetchCompletedJobs(
+  tenantId: string,
+  range: ReturnType<typeof getDateRange>,
+  buMap: Record<number, string>
+) {
+  const assignments = await stFetchAll(
+    `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
+    { modifiedOnOrAfter: range.from, modifiedBefore: range.to, pageSize: "500" }
+  ) as Record<string, unknown>[];
+
+  const jobToTech: Record<string, string> = {};
+  for (const a of assignments) {
+    if (a.status === "Dismissed") continue;
+    const jobId = String(a.jobId);
+    const techName = ((a.technicianName as string) || "").trim();
+    if (techName) jobToTech[jobId] = techName;
+  }
+
+  const jobs = await stFetchAll(
+    `/jpm/v2/tenant/${tenantId}/jobs`,
+    { completedOnOrAfter: range.from, completedBefore: range.to, jobStatus: "Completed", pageSize: "500" }
+  ) as Record<string, unknown>[];
+
+  return jobs.map(job => {
+    const buId = Number(job.businessUnitId) || 0;
+    const buName = buMap[buId] || "";
+    const invoiceTotal = parseNum(job.total);
+    return {
+      jobId: String(job.id),
+      jobNumber: (job.jobNumber as string) || String(job.id),
+      date: (job.completedOn as string) || (job.createdOn as string) || "",
+      tech: jobToTech[String(job.id)] || "Unassigned",
+      trade: normalizeTrade(buName),
+      invoiceTotal: Math.round(invoiceTotal),
+      netSale: Math.round(invoiceTotal * NET_SALE_FACTOR),
+      marginFlag: invoiceTotal < 100,
+    };
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -28,6 +149,7 @@ export async function GET(req: NextRequest) {
   const dateParam  = searchParams.get("date");
   const tradeParam = searchParams.get("trade");
   const staffParam = searchParams.get("staff");
+  const modeParam  = searchParams.get("mode");
 
   const range = getDateRange(dateParam);
   const trade = parseTrade(tradeParam);
@@ -37,82 +159,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const tenantId = process.env.ST_TENANT_ID!;
+    const buMap = await fetchBuMap(tenantId);
 
-    // Bulk fetch dispatch assignments for the period (efficient: 2-3 calls)
-    const assignments = await stFetchAll(
-      `/dispatch/v2/tenant/${tenantId}/appointment-assignments`,
-      {
-        modifiedOnOrAfter: range.from,
-        modifiedBefore: range.to,
-        pageSize: "500",
-      }
-    ) as Record<string, unknown>[];
+    let enriched = modeParam === "schedule"
+      ? await fetchScheduledJobs(tenantId, range, buMap)
+      : await fetchCompletedJobs(tenantId, range, buMap);
 
-    // jobId → techName
-    const jobToTech: Record<string, string> = {};
-    for (const a of assignments) {
-      if (a.status === "Dismissed") continue;
-      const jobId = String(a.jobId);
-      const techName = ((a.technicianName as string) || "").trim();
-      if (techName) jobToTech[jobId] = techName;
-    }
-
-    // Fetch completed jobs
-    const jobs = await stFetchAll(
-      `/jpm/v2/tenant/${tenantId}/jobs`,
-      {
-        completedOnOrAfter: range.from,
-        completedBefore: range.to,
-        jobStatus: "Completed",
-        pageSize: "500",
-      }
-    ) as Record<string, unknown>[];
-
-    // Fetch business unit names for trade mapping
-    let buMap: Record<number, string> = {};
-    try {
-      const buData = await stFetchAll(
-        `/jpm/v2/tenant/${tenantId}/business-units`,
-        { pageSize: "200" }
-      ) as Record<string, unknown>[];
-      for (const bu of buData) {
-        buMap[Number(bu.id)] = String(bu.name || "");
-      }
-    } catch {
-      // BU names optional — fall back to ID-based map
-      buMap = BU_TRADE_MAP as unknown as Record<number, string>;
-    }
-
-    const parseNum = (v: unknown): number => {
-      const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
-      return isNaN(n) ? 0 : n;
-    };
-
-    let enriched = jobs.map(job => {
-      const techName = jobToTech[String(job.id)] || "Unassigned";
-      const buId = Number(job.businessUnitId) || 0;
-      const buName = buMap[buId] || "";
-      const tradeName = normalizeTrade(buName);
-      const invoiceTotal = parseNum(job.total);
-      const netSale = invoiceTotal * NET_SALE_FACTOR;
-      const marginPct = 100; // We don't have cost breakdown from jobs v2
-      const marginFlag = invoiceTotal < 100; // Flag tiny jobs
-
-      return {
-        jobId: String(job.id),
-        jobNumber: (job.jobNumber as string) || String(job.id),
-        date: (job.completedOn as string) || (job.createdOn as string) || "",
-        tech: techName,
-        trade: tradeName,
-        invoiceTotal: Math.round(invoiceTotal),
-        netSale: Math.round(netSale),
-        marginFlag,
-      };
-    });
-
-    // Apply filters
     if (trade) {
-      enriched = enriched.filter(j => j.trade.toLowerCase().replace("/", "").replace("-", "") === trade.replace("/", "").replace("-", ""));
+      enriched = enriched.filter(j => j.trade === trade);
     }
     if (staffFilter) {
       enriched = enriched.filter(j => j.tech.toLowerCase().includes(staffFilter));

@@ -44,7 +44,7 @@ export default function Dispatch() {
   const [tab, setTab] = useState<"today" | "tomorrow" | "week">("today");
 
   const techs = useApi<TechsData>("/api/technicians", {});
-  const jobs  = useApi<JobsData>("/api/jobs", { date: "today" });
+  const jobs  = useApi<JobsData>("/api/jobs", { date: "today", mode: "schedule" });
 
   const loading = techs.loading || jobs.loading;
 
@@ -77,7 +77,7 @@ export default function Dispatch() {
       <div className="mb-4">
         <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">DISPATCH BOARD</div>
         <div className="text-sm text-gray-400">
-          Live · March 2026
+          Live · {new Date().toLocaleString("en-AU", { month: "long", year: "numeric" })}
           {updatedAt && <span className="ml-2 text-gray-600">· Updated {new Date(updatedAt).toLocaleString()}</span>}
         </div>
       </div>

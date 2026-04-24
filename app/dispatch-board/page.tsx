@@ -118,7 +118,7 @@ export default function DispatchBoard() {
   const [activeDay, setActiveDay] = useState<"today" | "tomorrow">("today");
 
   const techs = useApi<TechsData>("/api/technicians", {});
-  const jobs  = useApi<JobsData>("/api/jobs", { date: "today" });
+  const jobs  = useApi<JobsData>("/api/jobs", { date: "today", mode: "schedule" });
 
   const loading = techs.loading || jobs.loading;
 
