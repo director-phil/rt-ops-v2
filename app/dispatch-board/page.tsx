@@ -1,337 +1,390 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useApi } from "../lib/use-api";
 import Link from "next/link";
 
-type TechItem = {
-  name: string;
-  revenueMTD: number;
-  jobCount: number;
-  commission: number;
-  progressPct: number;
-  thresholdGap: number;
-  meetsThreshold: boolean;
-};
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-type JobItem = {
-  jobId: string;
+type AppointmentSchedule = {
+  appointmentId: number;
+  jobId: number;
   jobNumber: string;
-  date: string;
-  tech: string;
+  start: string;
+  end: string;
+  arrivalWindow: string;
+  status: string;
+  address: string;
+  suburb: string;
+  lat: number;
+  lng: number;
   trade: string;
-  invoiceTotal: number;
-  netSale: number;
+  estimatedRevenue: number;
+  driveMinutesFromPrev: number | null;
+  bufferMinutesFromPrev: number | null;
+  bufferTight: boolean;
 };
 
-type TechsData = { technicians: TechItem[]; updatedAt?: string };
-type JobsData  = { jobs: JobItem[]; totals?: { count: number; invoiceTotal: number }; updatedAt?: string };
+type TechSchedule = {
+  tech: string;
+  appointments: AppointmentSchedule[];
+  summary: {
+    jobCount: number;
+    estimatedRevenue: number;
+    totalDriveMinutes: number;
+    tightBufferCount: number;
+  };
+};
 
-const TRADE_CONFIG = {
-  electrical: { emoji: "⚡", bg: "bg-yellow-500/20", border: "border-yellow-500/50", text: "text-yellow-300", headerBg: "bg-yellow-500/10" },
-  hvac:       { emoji: "❄️", bg: "bg-teal-500/20",   border: "border-teal-500/50",   text: "text-teal-300",   headerBg: "bg-teal-500/10"   },
-  solar:      { emoji: "☀️", bg: "bg-orange-500/20", border: "border-orange-500/50", text: "text-orange-300", headerBg: "bg-orange-500/10" },
-  plumbing:   { emoji: "🔧", bg: "bg-blue-500/20",   border: "border-blue-500/50",   text: "text-blue-300",   headerBg: "bg-blue-500/10"   },
-} as const;
+type ScheduleData = {
+  ok: boolean;
+  date: string;
+  label: string;
+  companySummary: {
+    totalJobs: number;
+    totalEstRevenue: number;
+    techsWorking: number;
+    avgDriveMinutes: number;
+    totalTightBuffers: number;
+  } | null;
+  techSchedules: TechSchedule[];
+  updatedAt: string;
+};
 
-type TradeKey = keyof typeof TRADE_CONFIG;
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+const TRADE_CONFIG: Record<string, { emoji: string; bg: string; border: string; text: string }> = {
+  electrical: { emoji: "⚡", bg: "bg-yellow-500/15", border: "border-yellow-500/40", text: "text-yellow-300" },
+  hvac:       { emoji: "❄️", bg: "bg-teal-500/15",   border: "border-teal-500/40",   text: "text-teal-300"   },
+  solar:      { emoji: "☀️", bg: "bg-orange-500/15", border: "border-orange-500/40", text: "text-orange-300" },
+  plumbing:   { emoji: "🔧", bg: "bg-blue-500/15",   border: "border-blue-500/40",   text: "text-blue-300"   },
+  other:      { emoji: "🔩", bg: "bg-gray-500/15",   border: "border-gray-500/40",   text: "text-gray-400"   },
+};
 
 function tradeCfg(trade: string) {
-  return TRADE_CONFIG[trade as TradeKey] ?? {
-    emoji: "🔩", bg: "bg-gray-500/20", border: "border-gray-500/50", text: "text-gray-300", headerBg: "bg-gray-500/10"
-  };
-}
-
-function slugify(name: string) {
-  return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return TRADE_CONFIG[trade] ?? TRADE_CONFIG.other;
 }
 
 function shortName(name: string) {
   const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  return parts.length === 1 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
-function TechCard({
-  tech, jobCount, selected, onClick,
-}: {
-  tech: TechItem; jobCount: number; selected: boolean; onClick: () => void;
-}) {
-  const isActive = jobCount > 0;
+function initials(name: string) {
+  return name.trim().split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function fmtRevenue(n: number) {
+  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`;
+  return `$${n}`;
+}
+
+function fmtDrive(mins: number | null) {
+  if (mins === null) return null;
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function statusDot(status: string) {
+  if (status === "Done")       return "bg-green-500";
+  if (status === "InProgress" || status === "Dispatched") return "bg-blue-400 animate-pulse";
+  return "bg-gray-500";
+}
+
+// ─── Today date helper ───────────────────────────────────────────────────────
+function todayAEST() {
+  const d = new Date(Date.now() + 10 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function tomorrowAEST() {
+  const d = new Date(Date.now() + 10 * 60 * 60 * 1000 + 24 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function DriveConnector({ mins, tight }: { mins: number | null; tight: boolean }) {
+  if (mins === null) return (
+    <div className="flex items-center gap-2 py-1 px-3">
+      <div className="w-px h-4 bg-gray-800 mx-1" />
+      <span className="text-gray-700 text-xs">drive time unknown</span>
+    </div>
+  );
+
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left rounded-xl border p-3 transition-all ${
-        selected ? "bg-orange-500/20 border-orange-500/50" : "bg-gray-900 border-gray-800 hover:border-gray-700"
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-orange-500/20 border border-orange-500/50 flex items-center justify-center text-xs font-bold text-orange-300 flex-shrink-0">
-          {tech.name.split(" ").map(p => p[0]).join("").slice(0, 2)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-white text-sm font-semibold truncate">{shortName(tech.name)}</div>
-          <div className={`text-xs ${isActive ? "text-green-400" : "text-gray-500"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full inline-block mr-1 ${isActive ? "bg-green-500" : "bg-gray-600"}`} />
-            {isActive ? `${jobCount} jobs` : "no jobs"}
-          </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <div className="text-xs font-bold text-orange-400">${(tech.revenueMTD / 1000).toFixed(0)}k</div>
-          <div className="text-gray-600 text-xs">{tech.progressPct?.toFixed(0)}%</div>
-        </div>
-      </div>
-      <div className="mt-2 bg-gray-800 rounded-full h-1.5">
-        <div
-          className={`h-1.5 rounded-full transition-all ${tech.meetsThreshold ? "bg-green-500" : tech.progressPct >= 75 ? "bg-yellow-500" : "bg-orange-500"}`}
-          style={{ width: `${Math.min(tech.progressPct ?? 0, 100)}%` }}
-        />
-      </div>
-    </button>
+    <div className={`flex items-center gap-2 py-1 px-3 ${tight ? "text-red-400" : "text-gray-500"}`}>
+      <div className={`w-px h-3 mx-1 ${tight ? "bg-red-500/50" : "bg-gray-700"}`} />
+      <span className="text-xs font-medium">
+        {tight ? "⚠️ " : "🚗 "}{fmtDrive(mins)} drive
+      </span>
+      {tight && <span className="text-xs text-red-400/70">(tight)</span>}
+    </div>
   );
 }
 
-function JobCard({ job, highlighted }: { job: JobItem; highlighted: boolean }) {
-  const cfg = tradeCfg(job.trade);
+function AppointmentRow({ appt }: { appt: AppointmentSchedule }) {
+  const cfg = tradeCfg(appt.trade);
   return (
-    <div className={`rounded-lg border p-3 transition-all ${
-      highlighted ? `${cfg.bg} ${cfg.border} ring-2 ring-white/20` : "bg-gray-900 border-gray-800"
-    }`}>
+    <div className={`rounded-lg border p-3 ${cfg.bg} ${cfg.border}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-white text-sm font-semibold">{job.jobNumber}</div>
-          <div className={`inline-flex items-center gap-1 text-xs mt-1.5 px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.border} border ${cfg.text}`}>
-            {cfg.emoji} {job.trade}
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(appt.status)}`} />
+            <span className="text-white text-sm font-semibold">{appt.start}</span>
+            <span className="text-gray-500 text-xs">– {appt.end}</span>
+          </div>
+          <div className="text-gray-400 text-xs truncate">{appt.address}</div>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className={`text-xs px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.border} ${cfg.text}`}>
+              {cfg.emoji} {appt.trade}
+            </span>
+            <span className="text-gray-600 text-xs">{appt.jobNumber}</span>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="text-white text-sm font-bold">${job.invoiceTotal.toLocaleString()}</div>
-          <div className={`text-xs mt-0.5 ${cfg.text}`}>{job.tech || "—"}</div>
+          <div className={`text-sm font-bold ${cfg.text}`}>{fmtRevenue(appt.estimatedRevenue)}</div>
+          <div className="text-gray-600 text-xs mt-0.5">{appt.arrivalWindow}</div>
         </div>
       </div>
     </div>
   );
 }
 
+function TechCard({ schedule, expanded, onToggle }: {
+  schedule: TechSchedule;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { tech, appointments, summary } = schedule;
+  const hasIssues = summary.tightBufferCount > 0;
+
+  return (
+    <div
+      className={`rounded-xl border transition-all cursor-pointer ${
+        expanded
+          ? "bg-gray-900 border-gray-700"
+          : "bg-gray-900/60 border-gray-800 hover:border-gray-700"
+      }`}
+      onClick={onToggle}
+    >
+      {/* Card header */}
+      <div className="p-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-xs font-bold text-orange-300 flex-shrink-0">
+            {initials(tech)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-sm font-semibold">{shortName(tech)}</span>
+              {hasIssues && <span className="text-xs text-red-400 font-medium">⚠️ tight</span>}
+            </div>
+            <div className="text-gray-400 text-xs">
+              {summary.jobCount} {summary.jobCount === 1 ? "job" : "jobs"} · {fmtRevenue(summary.estimatedRevenue)} est
+              {summary.totalDriveMinutes > 0 && ` · ${fmtDrive(summary.totalDriveMinutes)} drive`}
+            </div>
+          </div>
+          <div className={`text-gray-500 text-xs transition-transform ${expanded ? "rotate-180" : ""}`}>▼</div>
+        </div>
+
+        {/* Trade pip row */}
+        <div className="flex gap-1 mt-2">
+          {[...new Set(appointments.map(a => a.trade))].map(trade => {
+            const cfg = tradeCfg(trade);
+            return (
+              <span key={trade} className={`text-xs px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.border} ${cfg.text}`}>
+                {cfg.emoji}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Expanded schedule */}
+      {expanded && (
+        <div className="border-t border-gray-800 px-3 pb-3 pt-2">
+          {appointments.map((appt, i) => (
+            <div key={appt.appointmentId}>
+              {i > 0 && (
+                <DriveConnector
+                  mins={appt.driveMinutesFromPrev}
+                  tight={appt.bufferTight}
+                />
+              )}
+              <AppointmentRow appt={appt} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function DispatchBoard() {
-  const [selectedTech, setSelectedTech] = useState<string | null>(null);
-  const [activeDay, setActiveDay] = useState<"today" | "tomorrow">("today");
+  const today    = todayAEST();
+  const tomorrow = tomorrowAEST();
 
-  const techs = useApi<TechsData>("/api/technicians", {});
-  const jobs  = useApi<JobsData>("/api/jobs", { date: "today", mode: "schedule" });
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [customInput, setCustomInput]   = useState("");
+  const [expandedTechs, setExpandedTechs] = useState<Set<string>>(new Set());
 
-  const loading = techs.loading || jobs.loading;
+  const dateLabel =
+    selectedDate === today    ? "today" :
+    selectedDate === tomorrow ? "tomorrow" :
+    selectedDate;
 
-  const allJobs  = jobs.data?.jobs ?? [];
-  const techList = techs.data?.technicians ?? [];
+  const { data, loading, error } = useApi<ScheduleData>(
+    "/api/dispatch-schedule",
+    { date: selectedDate },
+    undefined
+  );
 
-  // Count jobs per tech name
-  const jobsPerTech = allJobs.reduce<Record<string, number>>((acc, j) => {
-    if (j.tech) acc[j.tech] = (acc[j.tech] ?? 0) + 1;
-    return acc;
-  }, {});
+  const toggleTech = useCallback((tech: string) => {
+    setExpandedTechs(prev => {
+      const next = new Set(prev);
+      next.has(tech) ? next.delete(tech) : next.add(tech);
+      return next;
+    });
+  }, []);
 
-  const filteredJobs = selectedTech
-    ? allJobs.filter(j => slugify(j.tech ?? "") === selectedTech)
-    : allJobs;
+  const expandAll  = () => setExpandedTechs(new Set(data?.techSchedules.map(t => t.tech) ?? []));
+  const collapseAll = () => setExpandedTechs(new Set());
 
-  // Group jobs by trade
-  const trades = Array.from(new Set(filteredJobs.map(j => j.trade))).sort();
-
-  const jobsByTrade = trades.reduce<Record<string, JobItem[]>>((acc, t) => {
-    acc[t] = filteredJobs.filter(j => j.trade === t);
-    return acc;
-  }, {});
-
-  const sortedTechs = [...techList].sort((a, b) => (jobsPerTech[b.name] ?? 0) - (jobsPerTech[a.name] ?? 0));
-
-  const updatedAt = jobs.data?.updatedAt ?? techs.data?.updatedAt;
+  const cs = data?.companySummary;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-4 pt-5 pb-4 sticky top-0 z-30">
+
+      {/* ── Header ── */}
+      <div className="bg-gray-900 border-b border-gray-800 px-4 pt-5 pb-3 sticky top-0 z-30">
         <div className="max-w-screen-xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-xl font-bold">📋 Dispatch Board</h1>
-              <p className="text-gray-400 text-xs mt-0.5">
-                Reliable Tradies · Live scheduling
-                {updatedAt && ` · ${new Date(updatedAt).toLocaleString()}`}
-              </p>
+              <h1 className="text-lg font-bold">📋 Dispatch Board</h1>
+              {data?.label && <p className="text-gray-400 text-xs mt-0.5">{data.label}</p>}
             </div>
-            <Link href="/" className="text-gray-400 text-sm hover:text-white transition-colors">← Home</Link>
+            <Link href="/" className="text-gray-500 text-sm hover:text-white">← Home</Link>
           </div>
 
-          {/* Day selector */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveDay("today")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeDay === "today" ? "bg-white text-gray-950" : "bg-gray-800 text-gray-400 hover:text-white"}`}
-            >
-              Today
-              {!loading && (
-                <span className="ml-2 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">{allJobs.length} jobs</span>
+          {/* Date navigation */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {[
+              { label: "Today",    value: today },
+              { label: "Tomorrow", value: tomorrow },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedDate(opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  selectedDate === opt.value
+                    ? "bg-white text-gray-950"
+                    : "bg-gray-800 text-gray-400 hover:text-white"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            {/* Custom date */}
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={customInput}
+                onChange={e => setCustomInput(e.target.value)}
+                className="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:border-gray-500"
+              />
+              {customInput && customInput !== selectedDate && (
+                <button
+                  onClick={() => { setSelectedDate(customInput); setExpandedTechs(new Set()); }}
+                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-sm rounded-lg font-medium"
+                >
+                  Go
+                </button>
               )}
-            </button>
-            <button
-              onClick={() => setActiveDay("tomorrow")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeDay === "tomorrow" ? "bg-white text-gray-950" : "bg-gray-800 text-gray-400 hover:text-white"}`}
-            >
-              Tomorrow
-            </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {activeDay === "today" ? (
-        loading ? (
-          <div className="max-w-screen-xl mx-auto px-4 pt-6 space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-16 bg-gray-800 rounded-xl animate-pulse" />
+      <div className="max-w-screen-xl mx-auto px-4 py-4">
+
+        {/* ── Company summary strip ── */}
+        {cs && !loading && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {[
+              { label: "Jobs scheduled",  value: cs.totalJobs,                           sub: dateLabel },
+              { label: "Est. revenue",    value: `$${(cs.totalEstRevenue / 1000).toFixed(0)}k`, sub: "invoices not yet raised" },
+              { label: "Techs working",   value: cs.techsWorking,                        sub: "assigned technicians" },
+              { label: "Avg drive time",  value: fmtDrive(cs.avgDriveMinutes) ?? "—",   sub: cs.totalTightBuffers > 0 ? `⚠️ ${cs.totalTightBuffers} tight buffer${cs.totalTightBuffers > 1 ? "s" : ""}` : "no conflicts" },
+            ].map(stat => (
+              <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+                <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">{stat.label}</div>
+                <div className="text-white font-bold text-xl">{stat.value}</div>
+                <div className="text-gray-600 text-xs mt-0.5">{stat.sub}</div>
+              </div>
             ))}
           </div>
-        ) : (
-          <div className="max-w-screen-xl mx-auto">
-            {/* Stats row */}
-            <div className="grid grid-cols-4 gap-2 px-4 mt-4">
-              {(["electrical", "hvac", "solar", "plumbing"] as const).map(trade => {
-                const count = allJobs.filter(j => j.trade === trade).length;
-                const cfg = TRADE_CONFIG[trade];
-                return (
-                  <div key={trade} className={`${cfg.bg} border ${cfg.border} rounded-lg p-2 text-center`}>
-                    <div className="text-lg">{cfg.emoji}</div>
-                    <div className={`font-bold text-sm ${cfg.text}`}>{count}</div>
-                    <div className="text-gray-500 text-xs">jobs</div>
-                  </div>
-                );
-              })}
-            </div>
+        )}
 
-            {/* Main layout */}
-            <div className="flex gap-0 lg:gap-4 mt-4 px-0 lg:px-4">
-              {/* Desktop tech sidebar */}
-              <div className="hidden lg:block w-56 flex-shrink-0">
-                <div className="sticky top-28 space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
-                  <div className="text-gray-500 text-xs font-semibold uppercase tracking-wide px-1 mb-1">
-                    Technicians ({techList.length})
-                  </div>
-                  {selectedTech && (
-                    <button
-                      onClick={() => setSelectedTech(null)}
-                      className="w-full text-xs text-blue-400 text-left px-1 mb-1 hover:text-blue-300"
-                    >
-                      × Clear filter
-                    </button>
-                  )}
-                  {sortedTechs.map(tech => (
-                    <TechCard
-                      key={tech.name}
-                      tech={tech}
-                      jobCount={jobsPerTech[tech.name] ?? 0}
-                      selected={selectedTech === slugify(tech.name)}
-                      onClick={() => setSelectedTech(selectedTech === slugify(tech.name) ? null : slugify(tech.name))}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Mobile tech strip */}
-              <div className="lg:hidden w-full overflow-x-auto px-4 pb-2">
-                <div className="flex gap-2" style={{ minWidth: "max-content" }}>
-                  {selectedTech && (
-                    <button
-                      onClick={() => setSelectedTech(null)}
-                      className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gray-800 text-blue-400 text-xs border border-blue-500/40"
-                    >
-                      × All
-                    </button>
-                  )}
-                  {sortedTechs.map(tech => {
-                    const slug = slugify(tech.name);
-                    const isSelected = selectedTech === slug;
-                    const count = jobsPerTech[tech.name] ?? 0;
-                    return (
-                      <button
-                        key={tech.name}
-                        onClick={() => setSelectedTech(isSelected ? null : slug)}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all ${
-                          isSelected ? "bg-orange-500/20 border-orange-500/50 text-orange-300" : "bg-gray-900 border-gray-700 text-gray-300"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${count > 0 ? "bg-green-500" : "bg-gray-600"}`} />
-                        {shortName(tech.name)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Jobs board */}
-              <div className="flex-1 px-4 lg:px-0 pb-8 mt-2 lg:mt-0">
-                {selectedTech && (
-                  <div className="mb-3 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
-                    <span className="text-gray-400 text-sm">
-                      Showing jobs for{" "}
-                      <span className="text-white font-semibold">
-                        {techList.find(t => slugify(t.name) === selectedTech)?.name}
-                      </span>
-                      <button onClick={() => setSelectedTech(null)} className="ml-2 text-blue-400 text-xs hover:text-blue-300">× clear</button>
-                    </span>
-                  </div>
-                )}
-
-                {trades.map(trade => {
-                  const tradeJobs = jobsByTrade[trade];
-                  if (!tradeJobs?.length) return null;
-                  const cfg = tradeCfg(trade);
-                  return (
-                    <div key={trade} className="mb-5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="text-gray-400 text-xs font-semibold uppercase tracking-wide">
-                          {cfg.emoji} {trade}
-                        </div>
-                        <div className="flex-1 h-px bg-gray-800" />
-                        <div className="text-gray-600 text-xs">{tradeJobs.length} jobs</div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                        {tradeJobs.map(job => (
-                          <JobCard
-                            key={job.jobId}
-                            job={job}
-                            highlighted={selectedTech === slugify(job.tech ?? "")}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {filteredJobs.length === 0 && (
-                  <div className="text-center text-gray-500 py-12">
-                    {selectedTech ? "No jobs for this technician today." : "No jobs loaded."}
-                  </div>
-                )}
-
-                <div className="text-center text-gray-700 text-xs py-4">
-                  {allJobs.length} total jobs today · Tap a tech to filter
-                </div>
-              </div>
-            </div>
+        {/* ── Loading ── */}
+        {loading && (
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-20 bg-gray-900 rounded-xl animate-pulse" />
+            ))}
           </div>
-        )
-      ) : (
-        /* Tomorrow view */
-        <div className="max-w-2xl mx-auto px-4 pt-8 pb-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+        )}
+
+        {/* ── Error ── */}
+        {error && !loading && (
+          <div className="bg-red-950 border border-red-800 rounded-xl p-4 text-red-300 text-sm">
+            Failed to load schedule: {error}
+          </div>
+        )}
+
+        {/* ── Empty ── */}
+        {!loading && !error && data?.techSchedules.length === 0 && (
+          <div className="text-center text-gray-500 py-16">
             <div className="text-4xl mb-3">📅</div>
-            <div className="text-gray-400 font-semibold">Tomorrow&apos;s schedule</div>
-            <div className="text-gray-600 text-sm mt-1">
-              Live scheduling data for tomorrow will appear here once ServiceTitan scheduling integration is connected.
-            </div>
+            <div className="font-semibold">No appointments found</div>
+            <div className="text-sm mt-1">No jobs scheduled for {data?.label ?? selectedDate}</div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── Tech schedule grid ── */}
+        {!loading && !error && (data?.techSchedules.length ?? 0) > 0 && (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-gray-500 text-xs uppercase tracking-wide font-semibold">
+                Technician schedule — {data?.label}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={expandAll}   className="text-xs text-gray-500 hover:text-white">Expand all</button>
+                <span className="text-gray-700">·</span>
+                <button onClick={collapseAll} className="text-xs text-gray-500 hover:text-white">Collapse all</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {data?.techSchedules.map(schedule => (
+                <TechCard
+                  key={schedule.tech}
+                  schedule={schedule}
+                  expanded={expandedTechs.has(schedule.tech)}
+                  onToggle={() => toggleTech(schedule.tech)}
+                />
+              ))}
+            </div>
+
+            {data?.updatedAt && (
+              <div className="text-center text-gray-700 text-xs mt-6">
+                Updated {new Date(data.updatedAt).toLocaleTimeString("en-AU")}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
